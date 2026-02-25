@@ -1,17 +1,3 @@
-Feature 1 — VaR / CVaR Engine
-What it is. A Monte Carlo simulation that produces a portfolio-level loss distribution and extracts standard risk metrics.
-How it works:
-
-Draw 10,000 correlated standard normal vectors using the current correlation matrix (from Feature 4)
-Apply probability integral transform: U_i = Φ(Z_i)
-Each contract resolves YES in simulation s if U_i,s < model_prob_i
-Compute portfolio P&L per simulation; add liquidation slippage (from Feature 5) in tail scenarios
-Output: VaR_95, VaR_99, CVaR_95, P(ruin), component VaR per position
-
-Run twice: once with model_prob, once with market_prob. The gap between the two distributions shows how much your beliefs diverge from consensus.
-What it feeds. Feature 7 (baseline loss distribution for scenario comparison), dashboard display.
-How to test. Run against a single-contract portfolio; assert VaR equals full position size when market_prob > 0.95; assert two independent portfolios have VaR ≤ sum of individual VaRs (subadditivity of CVaR).
-
 Feature 8 — Kelly Optimizer
 What it is. A convex optimizer that computes target position sizes maximizing expected log wealth, subject to liquidity and concentration constraints.
 How it works:

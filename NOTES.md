@@ -10,11 +10,13 @@ src/
   liquidity.py       - Per-position liquidity metrics from order book
   factor_model.py    - PCA factor decomposition with Ledoit-Wolf shrinkage
   correlation.py     - Dynamic correlation with event-driven regime switching
+  var_engine.py      - Monte Carlo VaR/CVaR with correlated binary resolution
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
   test_liquidity.py     - Slippage hand calculations, flag thresholds
   test_factor_model.py  - Covariance reconstruction, stability across windows
   test_correlation.py   - Regime switching, pre-event vs baseline correlation
+  test_var_engine.py    - Single-contract VaR, CVaR subadditivity, slippage
 ```
 
 ## Feature Status
@@ -22,7 +24,7 @@ tests/
 - [x] Feature 5 — Liquidity Monitor
 - [x] Feature 2 — Factor Model
 - [x] Feature 4 — Dynamic Correlation Model
-- [ ] Feature 1 — VaR / CVaR Engine
+- [x] Feature 1 — VaR / CVaR Engine
 - [ ] Feature 8 — Kelly Optimizer
 - [ ] Feature 7 — Scenario Engine
 
@@ -65,6 +67,16 @@ This is the probability at which expected value equals zero after fees. For shor
 **Pre-event window stitching.** When collecting historical pre-event windows, logit-returns are computed WITHIN each window before concatenation. This avoids artificial jumps at window boundaries that would corrupt the covariance estimate.
 
 **Regime switching.** Event calendar checked for events within configurable hours (default 72h). First matching event type with a fitted pre-event matrix triggers the switch. Falls back to baseline otherwise. All switches are logged with reason.
+
+## Implemented: Feature 1 — VaR / CVaR Engine
+
+**Simulation approach.** Draw correlated standard normals via Cholesky, apply Φ(Z) → U ~ Uniform, resolve YES if U < prob. P&L computed from entry price and quantity. Fallback to eigenvalue decomposition if Cholesky fails (non-PD matrix).
+
+**Dual run.** `run_dual_var` produces two VaR results (model_prob vs market_prob) to quantify belief divergence.
+
+**Slippage add-on.** In tail scenarios (worst `slippage_tail_pct` fraction), total liquidation slippage is subtracted from P&L.
+
+**Component VaR.** Marginal contribution computed as average per-position loss in the VaR tail scenarios.
 
 ### Dependency Order
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}
