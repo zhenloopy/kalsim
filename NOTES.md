@@ -12,6 +12,7 @@ src/
   correlation.py     - Dynamic correlation with event-driven regime switching
   var_engine.py      - Monte Carlo VaR/CVaR with correlated binary resolution
   kelly.py           - Kelly criterion optimizer with constraints
+  scenario.py        - Scenario stress testing with deterministic P&L
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
   test_liquidity.py     - Slippage hand calculations, flag thresholds
@@ -19,6 +20,7 @@ tests/
   test_correlation.py   - Regime switching, pre-event vs baseline correlation
   test_var_engine.py    - Single-contract VaR, CVaR subadditivity, slippage
   test_kelly.py         - Analytical Kelly recovery, constraints, cluster caps
+  test_scenario.py      - Worst case P&L, no-overlap zero impact, JSON loading
 ```
 
 ## Feature Status
@@ -28,7 +30,7 @@ tests/
 - [x] Feature 4 — Dynamic Correlation Model
 - [x] Feature 1 — VaR / CVaR Engine
 - [x] Feature 8 — Kelly Optimizer
-- [ ] Feature 7 — Scenario Engine
+- [x] Feature 7 — Scenario Engine
 
 ## Implemented: Feature 6 — Unified Position Feed
 
@@ -88,5 +90,13 @@ This is the probability at which expected value equals zero after fees. For shor
 
 **Edge gating.** Contracts with |edge| < min_edge (default 3c) get zero allocation regardless of other factors.
 
-### Dependency Order
+## Implemented: Feature 7 — Scenario Engine
+
+**Three-state resolution.** Each contract resolves YES, NO, or INDETERMINATE per scenario. Indeterminate contracts use current mid price (mark-to-market), not entry price.
+
+**Resolution rules as callables.** Rules are `{contract_id: Callable(world_state) → Resolution}`, allowing arbitrary logic per contract. Missing rules default to INDETERMINATE.
+
+**VaR_99 flagging.** Scenarios where loss exceeds VaR_99 are automatically flagged, identifying tail risks the statistical model misses.
+
+### Dependency Order (all complete)
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}
