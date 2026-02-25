@@ -9,17 +9,19 @@ src/
   position_feed.py   - Normalizes raw Kalshi data → Position schema
   liquidity.py       - Per-position liquidity metrics from order book
   factor_model.py    - PCA factor decomposition with Ledoit-Wolf shrinkage
+  correlation.py     - Dynamic correlation with event-driven regime switching
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
   test_liquidity.py     - Slippage hand calculations, flag thresholds
   test_factor_model.py  - Covariance reconstruction, stability across windows
+  test_correlation.py   - Regime switching, pre-event vs baseline correlation
 ```
 
 ## Feature Status
 - [x] Feature 6 — Unified Position Feed
 - [x] Feature 5 — Liquidity Monitor
 - [x] Feature 2 — Factor Model
-- [ ] Feature 4 — Dynamic Correlation Model
+- [x] Feature 4 — Dynamic Correlation Model
 - [ ] Feature 1 — VaR / CVaR Engine
 - [ ] Feature 8 — Kelly Optimizer
 - [ ] Feature 7 — Scenario Engine
@@ -57,6 +59,12 @@ This is the probability at which expected value equals zero after fees. For shor
 **Reconstruction identity.** By construction: B·Σ_F·B' + diag(Σ_ε) reconstructs the shrunk covariance matrix exactly on the diagonal. Off-diagonal error is bounded by the idiosyncratic components dropped by PCA.
 
 **Auto factor count.** Scree-based: keep adding factors (2–4) until cumulative explained variance exceeds 50%.
+
+## Implemented: Feature 4 — Dynamic Correlation Model
+
+**Pre-event window stitching.** When collecting historical pre-event windows, logit-returns are computed WITHIN each window before concatenation. This avoids artificial jumps at window boundaries that would corrupt the covariance estimate.
+
+**Regime switching.** Event calendar checked for events within configurable hours (default 72h). First matching event type with a fitted pre-event matrix triggers the switch. Falls back to baseline otherwise. All switches are logged with reason.
 
 ### Dependency Order
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}

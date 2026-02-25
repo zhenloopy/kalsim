@@ -1,15 +1,3 @@
-Feature 4 — Dynamic Correlation Model
-What it is. A time-varying correlation matrix that switches between a baseline estimate and a pre-event elevated estimate based on a scheduled event calendar.
-How it works:
-
-Baseline: 90-day rolling Ledoit-Wolf covariance on logit-returns, updated daily
-Pre-event: For each major scheduled event type (FOMC, CPI, election), estimate a separate correlation matrix from the 7-day windows preceding historical instances of that event
-Switching rule: If a tracked event is within 72 hours, use the pre-event matrix; otherwise use baseline
-Log which regime is active and why at all times
-
-What it feeds. Feature 1 (correlation input to Monte Carlo).
-How to test. Assert that pre-event matrices show higher average pairwise correlation than baseline for economically related contract pairs; assert regime switches trigger correctly from the event calendar.
-
 Feature 1 — VaR / CVaR Engine
 What it is. A Monte Carlo simulation that produces a portfolio-level loss distribution and extracts standard risk metrics.
 How it works:
