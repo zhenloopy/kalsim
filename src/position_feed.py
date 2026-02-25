@@ -49,7 +49,6 @@ class PositionFeed:
     def client(self):
         if self._client is None:
             self._client = KalshiClient(self.config.kalshi)
-            self._client.login()
         return self._client
 
     def get_positions(self) -> list[Position]:
