@@ -1,17 +1,3 @@
-Feature 5 — Liquidity Monitor
-What it is. Per-position liquidity metrics computed from live order book data, updated continuously.
-Metrics per position:
-
-spread_pct = (ask - bid) / mid
-depth_at_best (quantity available at best bid/ask)
-amihud = |Δprice| / dollar_volume (rolling 7-day)
-position_vs_adv = position_notional / avg_daily_volume_30d
-liquidation_slippage (estimated cost to fully exit at current depth)
-liquidity_flag: NORMAL / WATCH (tte < 14d or spread > 5%) / CRITICAL (tte < 3d)
-
-What it feeds. Feature 8 (position size caps), Feature 1 (slippage add-on to VaR).
-How to test. Construct synthetic order books with known depth profiles; assert slippage estimates match hand calculations; assert flags trigger at correct thresholds.
-
 Feature 2 — Factor Model
 What it is. A PCA-based decomposition of portfolio risk into systematic factors, estimated from historical contract price data.
 How it works:
