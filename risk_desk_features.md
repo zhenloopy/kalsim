@@ -1,16 +1,3 @@
-Feature 2 — Factor Model
-What it is. A PCA-based decomposition of portfolio risk into systematic factors, estimated from historical contract price data.
-How it works:
-
-Collect daily price history for all contracts; filter out p < 0.05 or p > 0.95
-Transform prices to log-odds: L = log(p / (1-p))
-Compute daily changes ΔL; apply Ledoit-Wolf shrinkage to the covariance matrix
-Run PCA; retain 2–4 factors (use scree plot); label factors by inspecting which contracts load heavily on each PC
-Output: factor loading matrix B (N×k), factor covariance Σ_F, idiosyncratic variances Σ_ε
-
-What it feeds. Feature 4 (baseline correlation), Feature 1 (variance decomposition), Feature 8 (cluster concentration limits).
-How to test. Verify that B·Σ_F·B' + Σ_ε reconstructs the sample covariance matrix within shrinkage tolerance; verify that factor labels are stable across rolling estimation windows.
-
 Feature 4 — Dynamic Correlation Model
 What it is. A time-varying correlation matrix that switches between a baseline estimate and a pre-event elevated estimate based on a scheduled event calendar.
 How it works:
