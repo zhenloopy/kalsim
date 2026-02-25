@@ -13,6 +13,7 @@ src/
   var_engine.py      - Monte Carlo VaR/CVaR with correlated binary resolution
   kelly.py           - Kelly criterion optimizer with constraints
   scenario.py        - Scenario stress testing with deterministic P&L
+  sector.py          - Sector classification and portfolio breakdown
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
   test_liquidity.py     - Slippage hand calculations, flag thresholds
@@ -97,6 +98,12 @@ This is the probability at which expected value equals zero after fees. For shor
 **Resolution rules as callables.** Rules are `{contract_id: Callable(world_state) → Resolution}`, allowing arbitrary logic per contract. Missing rules default to INDETERMINATE.
 
 **VaR_99 flagging.** Scenarios where loss exceeds VaR_99 are automatically flagged, identifying tail risks the statistical model misses.
+
+## Implemented: Sector Breakdown
+
+**Keyword-based classification.** Event tickers are matched against keyword lists to assign sectors (Economics, Politics, Sports, Crypto, Finance, Climate/Weather, Tech/AI). Falls back to "Other" when no keywords match. This works without any API metadata — just the event ticker string.
+
+**Capital-at-risk weighting.** Each position's sector weight is its capital at risk divided by total capital at risk. For long YES positions: `|qty| × entry_price`. For short YES (long NO): `|qty| × (1 − entry_price)`. This measures actual dollars deployed, not notional.
 
 ### Dependency Order (all complete)
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}

@@ -18,6 +18,7 @@ MENU = """
 5) VaR / CVaR
 6) Kelly position sizing
 7) Scenario stress testing
+8) Sector breakdown
 0) Quit
 """
 
@@ -194,6 +195,57 @@ def run_scenario():
             print(f"    {cid}: ${pnl:.2f}")
 
 
+def run_sector_breakdown():
+    from src.sector import compute_sector_breakdown
+    from src.position_feed import build_position_from_data
+    import os
+
+    has_creds = os.environ.get("KALSHI_KEY_ID") and os.environ.get("KALSHI_PRIVATE_KEY")
+    if has_creds:
+        from src.position_feed import PositionFeed
+        positions = PositionFeed().get_positions()
+    else:
+        print("No Kalshi credentials — using demo portfolio.\n")
+        demo = [
+            ("FED-HOLD",    "FED",       120, 0.55),
+            ("CPI-HIGH",    "CPI",       -80, 0.40),
+            ("GDP-POS",     "GDP",        75, 0.50),
+            ("RECESSION-Q3","RECESSION",  60, 0.30),
+            ("ELECTION-WIN","ELECTION",   90, 0.52),
+            ("SENATE-FLIP", "SENATE",    -40, 0.45),
+            ("NBA-FINALS",  "NBA",        50, 0.60),
+            ("NFL-MVP",     "NFL",        30, 0.35),
+            ("BTC-100K",    "BTC",        70, 0.48),
+            ("ETH-HIGH",    "ETH",        25, 0.42),
+            ("HURRICANE-FL","HURRICANE",  35, 0.20),
+            ("SP500-UP",    "SP500",      55, 0.58),
+        ]
+        positions = []
+        for cid, eid, qty, entry in demo:
+            positions.append(build_position_from_data(
+                contract_id=cid, platform="kalshi", canonical_event_id=eid,
+                quantity=qty, entry_price=entry, current_mid=entry,
+                resolves_at=datetime.now(timezone.utc) + timedelta(days=30),
+                fee_rate=0.07,
+            ))
+
+    if not positions:
+        print("No positions found.")
+        return
+
+    breakdown, total = compute_sector_breakdown(positions)
+
+    bar_width = 30
+    print(f"  {'Sector':<20s} {'Weight':>7s}  ")
+    print(f"  {'─' * 20} {'─' * 7}  {'─' * bar_width}")
+    for sector, frac in breakdown.items():
+        pct = frac * 100
+        filled = int(round(frac * bar_width))
+        bar = "█" * filled + "░" * (bar_width - filled)
+        print(f"  {sector:<20s} {pct:6.1f}%  {bar}")
+    print(f"\n  Total capital at risk: ${total:,.2f}")
+
+
 ACTIONS = {
     "1": ("Pull live positions", run_positions),
     "2": ("Liquidity monitoring", run_liquidity),
@@ -202,6 +254,7 @@ ACTIONS = {
     "5": ("VaR / CVaR", run_var),
     "6": ("Kelly position sizing", run_kelly),
     "7": ("Scenario stress testing", run_scenario),
+    "8": ("Sector breakdown", run_sector_breakdown),
 }
 
 
