@@ -11,12 +11,14 @@ src/
   factor_model.py    - PCA factor decomposition with Ledoit-Wolf shrinkage
   correlation.py     - Dynamic correlation with event-driven regime switching
   var_engine.py      - Monte Carlo VaR/CVaR with correlated binary resolution
+  kelly.py           - Kelly criterion optimizer with constraints
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
   test_liquidity.py     - Slippage hand calculations, flag thresholds
   test_factor_model.py  - Covariance reconstruction, stability across windows
   test_correlation.py   - Regime switching, pre-event vs baseline correlation
   test_var_engine.py    - Single-contract VaR, CVaR subadditivity, slippage
+  test_kelly.py         - Analytical Kelly recovery, constraints, cluster caps
 ```
 
 ## Feature Status
@@ -25,7 +27,7 @@ tests/
 - [x] Feature 2 — Factor Model
 - [x] Feature 4 — Dynamic Correlation Model
 - [x] Feature 1 — VaR / CVaR Engine
-- [ ] Feature 8 — Kelly Optimizer
+- [x] Feature 8 — Kelly Optimizer
 - [ ] Feature 7 — Scenario Engine
 
 ## Implemented: Feature 6 — Unified Position Feed
@@ -77,6 +79,14 @@ This is the probability at which expected value equals zero after fees. For shor
 **Slippage add-on.** In tail scenarios (worst `slippage_tail_pct` fraction), total liquidation slippage is subtracted from P&L.
 
 **Component VaR.** Marginal contribution computed as average per-position loss in the VaR tail scenarios.
+
+## Implemented: Feature 8 — Kelly Optimizer
+
+**Two-path optimization.** Analytical Kelly (fractional scaling of `f* = (p-q)/(1-q)`) when no simulation data available. Joint log-wealth maximization via SLSQP when simulated returns are provided.
+
+**Constraint layering.** Applied in order: per-contract cap (default 5%), liquidity cap (per-contract dollar limit), cluster cap (15% per factor cluster). Constraints are enforced both in the optimizer bounds and as a post-optimization clamp.
+
+**Edge gating.** Contracts with |edge| < min_edge (default 3c) get zero allocation regardless of other factors.
 
 ### Dependency Order
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}
