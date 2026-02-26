@@ -12,17 +12,15 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Set environment variables for Kalshi API access:
+Set environment variables for Kalshi API access (or add to `.env`):
 
 ```bash
-export KALSHI_API_KEY="your-api-key"
-# or use email/password auth:
-export KALSHI_EMAIL="you@example.com"
-export KALSHI_PASSWORD="your-password"
+export KALSHI_KEY_ID="your-key-id"
+export KALSHI_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
 
 # optional
 export KALSHI_FEE_RATE="0.07"  # default 7%
-export KALSHI_API_URL="https://trading-api.kalshi.com/trade-api/v2"
+export KALSHI_API_URL="https://api.elections.kalshi.com/trade-api/v2"
 ```
 
 ## Usage

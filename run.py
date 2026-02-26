@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""CLI for kalsim risk desk — run scenarios from the README."""
-
 import sys
+import os
+import json
 import numpy as np
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -21,61 +21,34 @@ MENU = """
 0) Quit
 """
 
-def demo_positions():
-    return [
-        {"contract_id": "FED-HOLD", "quantity": 100, "entry_price": 0.55,
-         "current_mid": 0.65, "model_prob": 0.70, "market_prob": 0.60},
-        {"contract_id": "CPI-HIGH", "quantity": -50, "entry_price": 0.40,
-         "current_mid": 0.35, "model_prob": 0.30, "market_prob": 0.35},
-        {"contract_id": "GDP-POS", "quantity": 75, "entry_price": 0.50,
-         "current_mid": 0.58, "model_prob": 0.62, "market_prob": 0.55},
-    ]
+
+def _check_credentials():
+    if not os.environ.get("KALSHI_KEY_ID") or not os.environ.get("KALSHI_PRIVATE_KEY"):
+        print("No Kalshi credentials found.")
+        print("Set KALSHI_KEY_ID and KALSHI_PRIVATE_KEY in .env or environment.")
+        return False
+    return True
 
 
-def demo_prices(T=200, N=3):
-    rng = np.random.default_rng(42)
-    base = np.array([0.6, 0.35, 0.55])
-    prices = np.empty((T, N))
-    prices[0] = base
-    for t in range(1, T):
-        prices[t] = prices[t - 1] + rng.normal(0, 0.01, N)
-    return np.clip(prices, 0.06, 0.94)
-
-
-def demo_orderbook():
-    return {
-        "yes": [[65, 100], [60, 200], [55, 300]],
-        "no": [[40, 120], [45, 250]],
-    }
-
-
-def run_positions():
+def get_live_positions():
+    if not _check_credentials():
+        return None, None
     from src.position_feed import PositionFeed
-    import os
-
-    has_creds = os.environ.get("KALSHI_KEY_ID") and os.environ.get("KALSHI_PRIVATE_KEY")
-    if not has_creds:
-        print("No Kalshi credentials found in environment.")
-        print("Set KALSHI_KEY_ID and KALSHI_PRIVATE_KEY to pull live data.")
-        print("\nShowing demo position build instead:\n")
-        from src.position_feed import build_position_from_data
-        for p in demo_positions():
-            pos = build_position_from_data(
-                contract_id=p["contract_id"], platform="kalshi",
-                canonical_event_id=p["contract_id"], quantity=p["quantity"],
-                entry_price=p["entry_price"], current_mid=p["current_mid"],
-                resolves_at=datetime.now(timezone.utc) + timedelta(days=30),
-                fee_rate=0.07, model_prob=p["model_prob"],
-            )
-            print(f"  {pos.contract_id}: qty={pos.quantity}, mid={pos.current_mid:.2f}, "
-                  f"edge={pos.edge:.3f}, tte={pos.tte_days:.1f}d, "
-                  f"fee_be={pos.fee_adjusted_breakeven:.3f}")
-        return
-
     feed = PositionFeed()
     positions = feed.get_positions()
     if not positions:
-        print("No open positions found.")
+        print("No open positions.")
+        return None, None
+    return positions, feed.client
+
+
+def _positions_as_dicts(positions):
+    return [p.model_dump() for p in positions]
+
+
+def run_positions():
+    positions, _ = get_live_positions()
+    if positions is None:
         return
     for p in positions:
         print(f"  {p.contract_id}: qty={p.quantity}, mid={p.current_mid:.2f}, "
@@ -86,23 +59,58 @@ def run_positions():
 def run_liquidity():
     from src.liquidity import compute_liquidity_metrics
 
-    orderbook = demo_orderbook()
-    print("Orderbook:", orderbook)
-    for pos in demo_positions():
+    positions, client = get_live_positions()
+    if positions is None:
+        return
+
+    for p in positions:
+        orderbook = client.get_orderbook(p.contract_id)
         m = compute_liquidity_metrics(
-            pos["contract_id"], orderbook, quantity=pos["quantity"],
-            entry_price=pos["entry_price"], tte_days=30.0,
+            p.contract_id, orderbook, quantity=p.quantity,
+            entry_price=p.entry_price, tte_days=p.tte_days,
         )
-        print(f"\n  {m.contract_id}: spread={m.spread_pct:.3f}, "
+        print(f"  {m.contract_id}: spread={m.spread_pct:.3f}, "
               f"slippage=${m.liquidation_slippage:.2f}, flag={m.liquidity_flag}")
         print(f"    depth bid={m.depth_at_best_bid}, depth ask={m.depth_at_best_ask}")
+
+
+def _fetch_price_matrix(positions, client):
+    all_series = []
+    valid_ids = []
+    for p in positions:
+        history = client.get_market_history(p.contract_id)
+        if not history:
+            continue
+        prices = []
+        for snap in history:
+            price = snap.get("yes_price", snap.get("close", snap.get("price")))
+            if price is not None:
+                if price > 1:
+                    price = price / 100.0
+                prices.append(price)
+        if len(prices) >= 10:
+            all_series.append(prices)
+            valid_ids.append(p.contract_id)
+
+    if len(valid_ids) < 2:
+        print("Not enough price history (need at least 2 contracts with 10+ snapshots).")
+        return None, None
+
+    min_len = min(len(s) for s in all_series)
+    matrix = np.column_stack([np.array(s[:min_len]) for s in all_series])
+    return matrix, valid_ids
 
 
 def run_factor_model():
     from src.factor_model import estimate_factor_model, reconstruct_covariance
 
-    prices = demo_prices(T=200, N=3)
-    ids = [p["contract_id"] for p in demo_positions()]
+    positions, client = get_live_positions()
+    if positions is None:
+        return
+
+    prices, ids = _fetch_price_matrix(positions, client)
+    if prices is None:
+        return
 
     result = estimate_factor_model(prices, ids)
     print(f"  Factors: {result.n_factors}")
@@ -116,13 +124,17 @@ def run_factor_model():
 def run_correlation():
     from src.correlation import DynamicCorrelationModel, EventCalendar
 
-    prices = demo_prices(T=200, N=3)
+    positions, client = get_live_positions()
+    if positions is None:
+        return
+
+    prices, ids = _fetch_price_matrix(positions, client)
+    if prices is None:
+        return
 
     calendar = EventCalendar()
-    calendar.add_event("FOMC", datetime(2026, 3, 19, 18, 0, tzinfo=timezone.utc), "FOMC March")
-
     model = DynamicCorrelationModel(calendar=calendar)
-    model.fit_baseline(prices, window=90)
+    model.fit_baseline(prices, window=min(90, prices.shape[0]))
 
     regime = model.get_current_correlation()
     print(f"  Regime: {regime.regime}")
@@ -134,17 +146,21 @@ def run_correlation():
 def run_var():
     from src.var_engine import simulate_pnl, run_dual_var
 
-    positions = demo_positions()
-    corr = np.eye(len(positions))
+    positions, _ = get_live_positions()
+    if positions is None:
+        return
 
-    result = simulate_pnl(positions, corr, n_sims=50_000, seed=42)
+    pos_dicts = _positions_as_dicts(positions)
+    corr = np.eye(len(pos_dicts))
+
+    result = simulate_pnl(pos_dicts, corr, n_sims=50_000, seed=42)
     print(f"  VaR 95  = ${result.var_95:.2f}")
     print(f"  VaR 99  = ${result.var_99:.2f}")
     print(f"  CVaR 95 = ${result.cvar_95:.2f}")
     print(f"  P(ruin) = {result.p_ruin:.4f}")
     print(f"  Component VaR: {result.component_var}")
 
-    model_r, market_r = run_dual_var(positions, corr, n_sims=50_000, seed=42)
+    model_r, market_r = run_dual_var(pos_dicts, corr, n_sims=50_000, seed=42)
     print(f"\n  Model  VaR95=${model_r.var_95:.2f}, CVaR95=${model_r.cvar_95:.2f}")
     print(f"  Market VaR95=${market_r.var_95:.2f}, CVaR95=${market_r.cvar_95:.2f}")
 
@@ -152,11 +168,12 @@ def run_var():
 def run_kelly():
     from src.kelly import kelly_optimize
 
-    positions = demo_positions()
-    result = kelly_optimize(
-        positions, bankroll=10_000, kelly_fraction=0.25,
-        per_contract_cap=0.05, liquidity_caps={"FED-HOLD": 500.0},
-    )
+    positions, _ = get_live_positions()
+    if positions is None:
+        return
+
+    pos_dicts = _positions_as_dicts(positions)
+    result = kelly_optimize(pos_dicts, bankroll=10_000, kelly_fraction=0.25)
     for i, cid in enumerate(result.contract_ids):
         print(f"  {cid}: raw_kelly={result.raw_kelly[i]:.4f}, "
               f"target={result.target_fractions[i]:.4f}, "
@@ -164,30 +181,28 @@ def run_kelly():
 
 
 def run_scenario():
-    from src.scenario import Scenario, compute_scenario_pnl, run_scenario_library, Resolution
+    from src.scenario import Scenario, run_scenario_library, load_scenarios_from_json, Resolution
 
-    positions = demo_positions()
+    positions, _ = get_live_positions()
+    if positions is None:
+        return
 
-    resolution_rules = {
-        "FED-HOLD": lambda ws: Resolution.YES if ws.get("fed") == "hold" else Resolution.NO,
-        "CPI-HIGH": lambda ws: Resolution.YES if ws.get("cpi") == ">3%" else Resolution.NO,
-        "GDP-POS":  lambda ws: Resolution.YES if ws.get("gdp") == "positive" else Resolution.NO,
-    }
+    pos_dicts = _positions_as_dicts(positions)
 
-    scenarios = [
-        Scenario("Fed holds, low CPI, GDP growth",
-                 {"fed": "hold", "cpi": "<3%", "gdp": "positive"},
-                 "Goldilocks scenario"),
-        Scenario("Fed hikes, CPI spike",
-                 {"fed": "hike", "cpi": ">3%", "gdp": "negative"},
-                 "Stagflation scenario"),
-        Scenario("Fed holds, CPI spike, GDP flat",
-                 {"fed": "hold", "cpi": ">3%", "gdp": "flat"},
-                 "Mixed scenario"),
-    ]
+    scenarios_path = "scenarios.json"
+    if not os.path.exists(scenarios_path):
+        print(f"No {scenarios_path} found. Create it with scenario definitions to run stress tests.")
+        print('Format: [{"name": "...", "world_state": {"key": "value"}, "description": "..."}]')
+        return
 
+    scenarios = load_scenarios_from_json(scenarios_path)
+    if not scenarios:
+        print("No scenarios defined in scenarios.json.")
+        return
+
+    resolution_rules = {}
+    results = run_scenario_library(pos_dicts, scenarios, resolution_rules)
     print("  Scenarios:")
-    results = run_scenario_library(positions, scenarios, resolution_rules)
     for r in results:
         print(f"\n  '{r.scenario.name}': total P&L = ${r.pnl:.2f}")
         for cid, pnl in r.position_pnls.items():

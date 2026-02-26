@@ -52,3 +52,10 @@ class KalshiClient:
     def get_orderbook(self, ticker):
         data = self._request("GET", f"/markets/{ticker}/orderbook")
         return data.get("orderbook", data)
+
+    def get_market_history(self, ticker, limit=1000):
+        try:
+            data = self._request("GET", f"/markets/{ticker}/history", params={"limit": limit})
+            return data.get("history", data.get("snapshots", []))
+        except Exception:
+            return []
