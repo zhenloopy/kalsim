@@ -153,6 +153,9 @@ class RiskDeskApp(PageNavMixin, App):
 
     def _refresh_positions_table(self):
         rows, keys = [], []
+        cash = self.book_state.cash_balance
+        rows.append(("$CASH", "", f"${cash:,.2f}", "", "", "", "", ""))
+        keys.append("$CASH")
         for pos in self.book_state.positions:
             pnl = self.book_state.get_position_pnl(pos)
             flag = self._get_flag_for(pos.contract_id)
