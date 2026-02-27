@@ -8,6 +8,7 @@ class VaRResult:
     var_95: float
     var_99: float
     cvar_95: float
+    cvar_99: float
     p_ruin: float
     component_var: np.ndarray
     pnl_distribution: np.ndarray
@@ -17,7 +18,7 @@ class VaRResult:
 def simulate_pnl(
     positions: list[dict],
     correlation_matrix: np.ndarray,
-    n_sims: int = 10_000,
+    n_sims: int = 100_000,
     use_model_prob: bool = True,
     slippage_per_position: np.ndarray | None = None,
     slippage_tail_pct: float = 0.05,
@@ -35,7 +36,7 @@ def simulate_pnl(
     """
     n = len(positions)
     if n == 0:
-        return VaRResult(0, 0, 0, 0, np.array([]), np.array([0.0] * n_sims), "empty")
+        return VaRResult(0, 0, 0, 0, 0, np.array([]), np.array([0.0] * n_sims), "empty")
 
     rng = np.random.default_rng(seed)
 
@@ -83,8 +84,15 @@ def simulate_pnl(
     var_95 = float(np.percentile(losses, 95))
     var_99 = float(np.percentile(losses, 99))
     cvar_95 = float(np.mean(losses[losses >= np.percentile(losses, 95)]))
+    cvar_99 = float(np.mean(losses[losses >= np.percentile(losses, 99)]))
 
-    total_at_risk = float(np.sum(np.abs(quantities) * entry_prices))
+    # Max loss per position: long loses entry_price if NO, short loses (1-entry) if YES
+    max_loss_per_pos = np.where(
+        quantities > 0,
+        np.abs(quantities) * entry_prices,
+        np.abs(quantities) * (1.0 - entry_prices),
+    )
+    total_at_risk = float(np.sum(max_loss_per_pos))
     p_ruin = float(np.mean(losses >= total_at_risk)) if total_at_risk > 0 else 0.0
 
     # Component VaR: marginal contribution of each position
@@ -97,6 +105,7 @@ def simulate_pnl(
         var_95=var_95,
         var_99=var_99,
         cvar_95=cvar_95,
+        cvar_99=cvar_99,
         p_ruin=p_ruin,
         component_var=component_var,
         pnl_distribution=portfolio_pnl,
@@ -104,7 +113,7 @@ def simulate_pnl(
     )
 
 
-def run_dual_var(positions, correlation_matrix, n_sims=10_000, **kwargs):
+def run_dual_var(positions, correlation_matrix, n_sims=100_000, **kwargs):
     """Run VaR twice: once with model_prob, once with market_prob."""
     model_result = simulate_pnl(positions, correlation_matrix, n_sims, use_model_prob=True, **kwargs)
     market_result = simulate_pnl(positions, correlation_matrix, n_sims, use_model_prob=False, **kwargs)
