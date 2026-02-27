@@ -2,63 +2,9 @@ Screen {
     background: $surface;
 }
 
-#main-container {
-    layout: horizontal;
-}
-
 #content-area {
-    width: 70%;
+    width: 100%;
     height: 100%;
-}
-
-#sidebar {
-    width: 30%;
-    height: 100%;
-    border-left: thick $accent;
-    padding: 1 2;
-}
-
-#sidebar-title {
-    text-style: bold;
-    color: $text;
-    text-align: center;
-    margin-bottom: 1;
-}
-
-.sidebar-section {
-    margin-bottom: 1;
-}
-
-.sidebar-label {
-    color: $text-muted;
-}
-
-.sidebar-value {
-    text-style: bold;
-}
-
-.risk-good {
-    color: $success;
-}
-
-.risk-warn {
-    color: $warning;
-}
-
-.risk-bad {
-    color: $error;
-}
-
-.flag-normal {
-    color: $success;
-}
-
-.flag-watch {
-    color: $warning;
-}
-
-.flag-critical {
-    color: $error;
 }
 
 #status-bar {
@@ -67,16 +13,6 @@ Screen {
     background: $primary;
     color: $text;
     padding: 0 2;
-}
-
-.ws-connected {
-    color: $success;
-    text-style: bold;
-}
-
-.ws-disconnected {
-    color: $error;
-    text-style: bold;
 }
 
 DataTable {
@@ -130,6 +66,30 @@ DataTable > .datatable--cursor {
     padding: 1 2;
 }
 
+#scenario-input {
+    height: auto;
+    max-height: 16;
+    padding: 0 1;
+}
+
+#scenario-textarea {
+    height: 10;
+}
+
+#scenario-error {
+    height: auto;
+    max-height: 2;
+}
+
+#scenario-submit {
+    width: auto;
+}
+
+#scenario-input-title {
+    text-style: bold;
+    color: $accent;
+}
+
 #liquidity-panel {
     padding: 1 2;
 }
@@ -160,7 +120,13 @@ Footer {
 }
 
 Header {
-    background: $primary;
+    background: $accent;
+    color: $text;
+}
+
+HeaderTitle {
+    text-style: bold;
+    color: white;
 }
 
 ContentSwitcher {

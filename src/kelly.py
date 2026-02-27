@@ -64,7 +64,8 @@ def kelly_optimize(
         )
 
     current_fractions = np.array([
-        p["quantity"] * p["entry_price"] / bankroll for p in positions
+        p["quantity"] * ((1.0 - p["entry_price"]) if p["quantity"] < 0 else p["entry_price"]) / bankroll
+        for p in positions
     ])
     trades = target - current_fractions
     trades[np.abs(trades) < rebalance_threshold] = 0.0

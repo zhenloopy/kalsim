@@ -189,7 +189,7 @@ class TestFillHandling:
         assert new_ticker == "NEW"
         assert len(state.positions) == 1
         assert state.positions[0].quantity == -3
-        assert state.positions[0].entry_price == 0.93
+        assert abs(state.positions[0].entry_price - 0.07) < 1e-10
 
     def test_fill_on_existing_returns_none(self):
         state = BookState()

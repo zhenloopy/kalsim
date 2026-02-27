@@ -133,6 +133,8 @@ class BookState:
 
         entry = price_cents / 100.0 if price_cents > 1 else price_cents
         quantity = count if side == "yes" else -count
+        if side == "no":
+            entry = 1.0 - entry
         mid = entry
         placeholder_resolve = datetime.now(timezone.utc) + timedelta(days=365)
 

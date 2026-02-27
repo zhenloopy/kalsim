@@ -86,6 +86,8 @@ class PositionFeed:
         abs_qty = abs(quantity)
         if abs_qty > 0 and market_exposure:
             entry_price = market_exposure / abs_qty / 100.0
+            if quantity < 0:
+                entry_price = 1.0 - entry_price
         else:
             entry_price = mid
 

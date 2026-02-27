@@ -6,7 +6,7 @@ from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import (
     Header, Footer, Static, DataTable, Label, TabbedContent, TabPane, Tabs,
@@ -14,7 +14,7 @@ from textual.widgets import (
 from textual.worker import Worker, WorkerState
 
 from src.book_state import BookState
-from src.tui.widgets import RiskSidebar, OrderbookDisplay, CachedDataTable
+from src.tui.widgets import OrderbookDisplay, CachedDataTable, ScenarioInput
 from src.tui.nav import PageNavMixin, NAV_BINDINGS
 
 CSS_PATH = Path(__file__).parent / "styles.tcss"
@@ -60,24 +60,23 @@ class RiskDeskApp(PageNavMixin, App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with Horizontal(id="main-container"):
-            with TabbedContent(id="content-area"):
-                with TabPane("Positions", id="positions"):
-                    yield CachedDataTable(id="positions-table")
-                with TabPane("Orderbook", id="orderbook"):
-                    yield CachedDataTable(id="ob-positions-table")
-                    yield OrderbookDisplay()
-                with TabPane("VaR/Risk", id="var"):
-                    yield VerticalScroll(Static(id="var-content"), id="var-panel")
-                with TabPane("Kelly", id="kelly"):
-                    yield VerticalScroll(Static(id="kelly-content"), id="kelly-panel")
-                with TabPane("Scenarios", id="scenarios"):
-                    yield VerticalScroll(Static(id="scenario-content"), id="scenario-panel")
-                with TabPane("Liquidity", id="liquidity"):
-                    yield CachedDataTable(id="liquidity-table")
-                with TabPane("Docs", id="docs"):
-                    yield VerticalScroll(Static(id="docs-content"), id="docs-panel")
-            yield RiskSidebar(id="sidebar")
+        with TabbedContent(id="content-area"):
+            with TabPane("Positions", id="positions"):
+                yield CachedDataTable(id="positions-table")
+            with TabPane("Orderbook", id="orderbook"):
+                yield CachedDataTable(id="ob-positions-table")
+                yield OrderbookDisplay()
+            with TabPane("VaR/Risk", id="var"):
+                yield VerticalScroll(Static(id="var-content"), id="var-panel")
+            with TabPane("Kelly", id="kelly"):
+                yield VerticalScroll(Static(id="kelly-content"), id="kelly-panel")
+            with TabPane("Scenarios", id="scenarios"):
+                yield ScenarioInput(id="scenario-input")
+                yield VerticalScroll(Static(id="scenario-content"), id="scenario-panel")
+            with TabPane("Liquidity", id="liquidity"):
+                yield CachedDataTable(id="liquidity-table")
+            with TabPane("Docs", id="docs"):
+                yield VerticalScroll(Static(id="docs-content"), id="docs-panel")
         yield Footer()
 
     def on_mount(self):
@@ -106,7 +105,6 @@ class RiskDeskApp(PageNavMixin, App):
 
         self._refresh_positions_table()
         self._refresh_ob_positions_table()
-        self._refresh_sidebar()
         self._refresh_docs_panel()
         self._update_subtitle()
 
@@ -135,7 +133,6 @@ class RiskDeskApp(PageNavMixin, App):
     def _on_book_update(self):
         self._refresh_positions_table()
         self._refresh_ob_positions_table()
-        self._refresh_sidebar()
         self._refresh_orderbook()
         self._update_subtitle()
 
@@ -148,7 +145,6 @@ class RiskDeskApp(PageNavMixin, App):
     def _periodic_refresh(self):
         self._refresh_positions_table()
         self._refresh_ob_positions_table()
-        self._refresh_sidebar()
         self._update_subtitle()
 
     def _refresh_positions_table(self):
@@ -159,9 +155,12 @@ class RiskDeskApp(PageNavMixin, App):
         for pos in self.book_state.positions:
             pnl = self.book_state.get_position_pnl(pos)
             flag = self._get_flag_for(pos.contract_id)
+            is_short = pos.quantity < 0
+            display_entry = (1.0 - pos.entry_price) if is_short else pos.entry_price
+            display_mid = (1.0 - pos.current_mid) if is_short else pos.current_mid
             rows.append((
                 pos.contract_id, str(pos.quantity),
-                f"{pos.entry_price:.2f}", f"{pos.current_mid:.2f}",
+                f"{display_entry:.2f}", f"{display_mid:.2f}",
                 f"{pos.edge:+.3f}", f"${pnl:+.2f}",
                 f"{pos.tte_days:.1f}d", flag,
             ))
@@ -171,7 +170,9 @@ class RiskDeskApp(PageNavMixin, App):
     def _refresh_ob_positions_table(self):
         rows, keys = [], []
         for pos in self.book_state.positions:
-            rows.append((pos.contract_id, str(pos.quantity), f"{pos.current_mid:.2f}"))
+            is_short = pos.quantity < 0
+            display_mid = (1.0 - pos.current_mid) if is_short else pos.current_mid
+            rows.append((pos.contract_id, str(pos.quantity), f"{display_mid:.2f}"))
             keys.append(pos.contract_id)
         self.query_one("#ob-positions-table", CachedDataTable).update_rows(rows, keys)
 
@@ -180,24 +181,6 @@ class RiskDeskApp(PageNavMixin, App):
             if m.contract_id == contract_id:
                 return m.liquidity_flag
         return "-"
-
-    def _refresh_sidebar(self):
-        sidebar = self.query_one("#sidebar", RiskSidebar)
-        sidebar.total_pnl = self.book_state.get_total_pnl()
-        sidebar.ws_status = self.book_state.ws_connected
-
-        if self._var_result:
-            sidebar.var_95 = self._var_result.var_95
-            sidebar.var_99 = self._var_result.var_99
-            sidebar.cvar_95 = self._var_result.cvar_95
-            sidebar.cvar_99 = self._var_result.cvar_99
-            sidebar.p_ruin = self._var_result.p_ruin
-
-        flags = []
-        for m in self._liquidity_metrics:
-            if m.liquidity_flag != "NORMAL":
-                flags.append({"id": m.contract_id, "flag": m.liquidity_flag})
-        sidebar.flags = flags
 
     def _refresh_orderbook(self):
         if self._selected_ticker is None:
@@ -249,7 +232,10 @@ class RiskDeskApp(PageNavMixin, App):
             raw = kr.raw_kelly[i]
             tgt_dollars = kr.target_fractions[i] * bankroll
             pos = self.book_state.positions[i] if i < len(self.book_state.positions) else None
-            current_dollars = pos.quantity * pos.entry_price if pos else 0.0
+            if pos:
+                current_dollars = pos.quantity * ((1.0 - pos.entry_price) if pos.quantity < 0 else pos.entry_price)
+            else:
+                current_dollars = 0.0
             trade_dollars = tgt_dollars - current_dollars
             trade_style = "green" if trade_dollars > 0.01 else "red" if trade_dollars < -0.01 else "dim"
             t.append(f"  {cid:<20} {raw:>+8.4f} {tgt_dollars:>+8.2f}  {current_dollars:>+8.2f}  ")
@@ -413,12 +399,65 @@ class RiskDeskApp(PageNavMixin, App):
 
         t.append("5. SCENARIOS\n", style="bold cyan")
         t.append("-" * 40 + "\n")
-        t.append("Deterministic stress tests from scenarios.json.\n")
-        t.append("Define world states that force contracts to resolve\n")
-        t.append("YES, NO, or INDETERMINATE (mark-to-market).\n\n")
-        t.append("  • Shows total P&L per scenario + per-position breakdown\n")
-        t.append("  • Flags [EXCEEDS VaR99] if scenario loss > VaR 99\n")
-        t.append("  • Create scenarios.json in the project root to use\n\n")
+        t.append("Deterministic stress tests. Define hypothetical outcomes\n")
+        t.append("and see exact P&L impact on your portfolio.\n\n")
+
+        t.append("Adding scenarios:\n", style="bold")
+        t.append("  Use the input form at the top of the Scenarios tab.\n")
+        t.append("  Fill in the JSON template and press Submit.\n")
+        t.append("  Valid scenarios are saved to scenarios.json and appear\n")
+        t.append("  in the results panel immediately.\n\n")
+
+        t.append("JSON fields:\n", style="bold")
+        t.append("  name              ", style="bold")
+        t.append("(required) Scenario label shown in results.\n")
+        t.append("                    Must be a non-empty string.\n\n")
+        t.append("  world_state       ", style="bold")
+        t.append("(required) Object describing the scenario state.\n")
+        t.append("                    Used by callable resolution rules.\n")
+        t.append("                    Can be {} if using overrides only.\n\n")
+        t.append("  description       ", style="bold")
+        t.append("(optional) Free-text description. Default \"\".\n\n")
+
+        t.append("  resolution_overrides\n", style="bold")
+        t.append("                    (optional) Object mapping contract IDs\n")
+        t.append("                    to \"YES\" or \"NO\". Forces the contract\n")
+        t.append("                    to resolve at $1.00 or $0.00.\n")
+        t.append("                    P&L = qty × (settle − entry).\n")
+        t.append("                    Values must be exactly \"YES\" or \"NO\".\n\n")
+
+        t.append("  probability_overrides\n", style="bold")
+        t.append("                    (optional) Object mapping contract IDs\n")
+        t.append("                    to a probability in [0, 1]. Computes\n")
+        t.append("                    expected value P&L instead of binary:\n")
+        t.append("                    P&L = qty × (prob − entry).\n")
+        t.append("                    Use for \"what if the market moves to\n")
+        t.append("                    this probability\" analysis.\n\n")
+
+        t.append("Constraints:\n", style="bold")
+        t.append("  • A contract ID cannot appear in both resolution_overrides\n")
+        t.append("    and probability_overrides (mutually exclusive).\n")
+        t.append("  • resolution_overrides values: only \"YES\" or \"NO\".\n")
+        t.append("  • probability_overrides values: number in [0, 1].\n\n")
+
+        t.append("Priority chain:\n", style="bold")
+        t.append("  When computing P&L for each position, the first match wins:\n")
+        t.append("  1. probability_overrides → expected value P&L\n")
+        t.append("  2. resolution_overrides  → binary settle at $1/$0\n")
+        t.append("  3. resolution_rules      → callable logic (if defined)\n")
+        t.append("  4. fallthrough            → mark-to-market (mid − entry)\n\n")
+
+        t.append("Output:\n", style="bold")
+        t.append("  • Total P&L per scenario + per-position breakdown\n")
+        t.append("  • [EXCEEDS VaR99] flag if scenario loss > VaR 99\n\n")
+
+        t.append("Example:\n", style="bold")
+        t.append('  {\n', style="dim")
+        t.append('    "name": "Fed holds + BTC rallies",\n', style="dim")
+        t.append('    "world_state": {"fed": "hold"},\n', style="dim")
+        t.append('    "resolution_overrides": {"FED-HOLD": "YES"},\n', style="dim")
+        t.append('    "probability_overrides": {"KXBTC-26031": 0.85}\n', style="dim")
+        t.append('  }\n\n', style="dim")
 
         t.append("6. LIQUIDITY\n", style="bold cyan")
         t.append("-" * 40 + "\n")
@@ -458,14 +497,6 @@ class RiskDeskApp(PageNavMixin, App):
         t.append("TTE < 3 days\n")
         t.append("             Near-expiry. Very tight window to exit.\n")
         t.append("             Exits may face severe slippage.\n\n")
-
-        t.append("RISK SIDEBAR\n", style="bold cyan")
-        t.append("-" * 40 + "\n")
-        t.append("Always-visible panel on the right (30% width) showing:\n")
-        t.append("  • VaR 95 / 99, CVaR 95, P(ruin)\n")
-        t.append("  • Total portfolio P&L\n")
-        t.append("  • WebSocket connection status (WS:ON / WS:OFF)\n")
-        t.append("  • Any non-NORMAL liquidity flags\n\n")
 
         t.append("KEYBINDINGS\n", style="bold cyan")
         t.append("-" * 40 + "\n")
@@ -528,7 +559,6 @@ class RiskDeskApp(PageNavMixin, App):
         self.call_from_thread(self._post_risk_refresh)
 
     def _post_risk_refresh(self):
-        self._refresh_sidebar()
         self._refresh_positions_table()
         self._refresh_ob_positions_table()
         self._refresh_var_panel()
@@ -556,3 +586,12 @@ class RiskDeskApp(PageNavMixin, App):
 
     def action_focus_tabs(self):
         self.query_one(Tabs).focus()
+
+    def on_scenario_input_submitted(self, event: ScenarioInput.Submitted):
+        from src.scenario import append_scenario_to_json
+        try:
+            append_scenario_to_json("scenarios.json", event.scenario)
+            self._refresh_scenario_panel()
+            self.notify(f"Scenario '{event.scenario.name}' saved", timeout=3)
+        except Exception as e:
+            self.notify(f"Save failed: {e}", severity="error", timeout=5)

@@ -17,7 +17,7 @@ src/
   scenario.py        - Scenario stress testing with deterministic P&L
   tui/
     app.py           - Main Textual TUI application
-    widgets.py       - Custom widgets (RiskSidebar, OrderbookDisplay)
+    widgets.py       - Custom widgets (OrderbookDisplay, CachedDataTable, ScenarioInput)
     styles.tcss      - Textual CSS styling
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
@@ -108,6 +108,16 @@ This is the probability at which expected value equals zero after fees. For shor
 
 **VaR_99 flagging.** Scenarios where loss exceeds VaR_99 are automatically flagged, identifying tail risks the statistical model misses.
 
+**Extended scenario format.** Two new optional fields on `Scenario`:
+- `resolution_overrides: {contract_id: "YES"|"NO"}` — force specific contracts to resolve deterministically
+- `probability_overrides: {contract_id: float}` — expected value P&L at a user-modeled probability (`pnl = qty * (prob - entry)`)
+
+**Override priority chain.** When computing scenario P&L: probability_overrides → resolution_overrides → resolution_rules (callables) → INDETERMINATE (mark-to-market). A contract can only appear in one override dict (validated).
+
+**TUI scenario input.** `ScenarioInput` widget at the top of the Scenarios tab: TextArea with JSON template, inline validation errors, Submit button below. Valid scenarios are appended to `scenarios.json` and the results panel refreshes immediately.
+
+**Validation.** `validate_scenario_json(raw)` parses and validates all fields with clear error messages: required name/world_state, optional description, resolution values must be "YES"/"NO", probability values must be floats in [0,1], no contract can appear in both override dicts.
+
 ### Dependency Order (all complete)
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}
 
@@ -128,11 +138,9 @@ Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7,
 
 **Framework.** Textual 8.x — async Python TUI framework. Single event loop manages both websocket and UI rendering.
 
-**Layout.** Header (title + clock + subtitle with position count/PnL/WS status) → main content (70%, tabbed) + risk sidebar (30%) → footer (keybindings).
+**Layout.** Header (title + clock + subtitle with position count/PnL/WS status) → full-width tabbed content → footer (keybindings).
 
 **Tabs.** 7 views: Positions, Orderbook, VaR/Risk, Kelly, Scenarios, Liquidity, Docs. Switchable via number keys 1-7.
-
-**Risk sidebar.** Always visible. Shows VaR 95/99, CVaR 95, P(ruin), total PnL, and liquidity flags for non-NORMAL contracts.
 
 **Performance.** UI updates debounced at 150ms to prevent rapid WS deltas from flooding the renderer. Risk computations (VaR Monte Carlo, Kelly optimization, liquidity metrics) run in Textual thread workers, not on the UI thread. Recomputed every 10s or on manual refresh (r key).
 
