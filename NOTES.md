@@ -130,10 +130,14 @@ Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7,
 
 **Layout.** Header (title + clock + subtitle with position count/PnL/WS status) → main content (70%, tabbed) + risk sidebar (30%) → footer (keybindings).
 
-**Tabs.** 6 views: Positions, Orderbook, VaR/Risk, Kelly, Scenarios, Liquidity. Switchable via number keys 1-6.
+**Tabs.** 7 views: Positions, Orderbook, VaR/Risk, Kelly, Scenarios, Liquidity, Docs. Switchable via number keys 1-7.
 
 **Risk sidebar.** Always visible. Shows VaR 95/99, CVaR 95, P(ruin), total PnL, and liquidity flags for non-NORMAL contracts.
 
 **Performance.** UI updates debounced at 150ms to prevent rapid WS deltas from flooding the renderer. Risk computations (VaR Monte Carlo, Kelly optimization, liquidity metrics) run in Textual thread workers, not on the UI thread. Recomputed every 10s or on manual refresh (r key).
+
+**Bankroll.** Kelly optimizer uses live account bankroll (cash_balance + portfolio_value) fetched from `GET /portfolio/balance` at startup, instead of a hardcoded value.
+
+**Docs tab.** Built-in documentation accessible via tab 7. Covers all columns, formulas, and flag thresholds.
 
 **Signal handling.** Ctrl+C and q both trigger graceful shutdown (WS disconnect, app exit). Escape deselects. Unknown keys are ignored by Textual's event system.
