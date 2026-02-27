@@ -25,6 +25,7 @@ rich==14.3.3
 scikit-learn==1.8.0
 scipy==1.17.1
 textual==8.0.0
+textual-plotext==1.0.1
 threadpoolctl==3.6.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0

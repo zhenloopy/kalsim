@@ -79,8 +79,10 @@ def main():
 
     from src.tui.app import RiskDeskApp
     from src.ws_client import KalshiWS
+    from src.nav_store import NavStore
 
-    app = RiskDeskApp(book_state)
+    nav_store = NavStore()
+    app = RiskDeskApp(book_state, nav_store=nav_store)
     ws_client = KalshiWS(kalshi_config, book_state)
 
     async def run_with_ws():
@@ -89,11 +91,12 @@ def main():
             await app.run_async()
         finally:
             await ws_client.stop()
+            nav_store.close()
 
     try:
         asyncio.run(run_with_ws())
     except KeyboardInterrupt:
-        pass
+        nav_store.close()
 
 
 if __name__ == "__main__":

@@ -223,6 +223,29 @@ class TestCallbacks:
         assert state.get_mid("T") is not None
 
 
+class TestComputeNav:
+    def test_nav_equals_cash_plus_position_values(self):
+        state = BookState()
+        state.cash_balance = 500.0
+        p1 = _make_position("A", quantity=10, mid=0.60)
+        p2 = _make_position("B", quantity=-5, mid=0.40)
+        state.set_positions([p1, p2])
+        # NAV = 500 + 10*0.60 + (-5)*0.40 = 500 + 6 - 2 = 504
+        assert abs(state.compute_nav() - 504.0) < 1e-10
+
+    def test_nav_with_no_positions(self):
+        state = BookState()
+        state.cash_balance = 1000.0
+        assert abs(state.compute_nav() - 1000.0) < 1e-10
+
+    def test_nav_with_zero_cash(self):
+        state = BookState()
+        state.cash_balance = 0.0
+        pos = _make_position("A", quantity=10, mid=0.50)
+        state.set_positions([pos])
+        assert abs(state.compute_nav() - 5.0) < 1e-10
+
+
 class TestEdgeCases:
     def test_orderbook_sorting_descending(self):
         """Verify levels are sorted best-first (highest price first)."""

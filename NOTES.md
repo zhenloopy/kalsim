@@ -8,6 +8,7 @@ src/
   kalshi_client.py   - Kalshi REST API client (used for initial fetch)
   ws_client.py       - Async websocket client for live streaming
   book_state.py      - Shared in-memory state (positions, orderbooks, tickers)
+  collector.py       - Background NAV collector (detached process, CLI + importable)
   position_feed.py   - Normalizes raw Kalshi data → Position schema
   liquidity.py       - Per-position liquidity metrics from order book
   factor_model.py    - PCA factor decomposition with Ledoit-Wolf shrinkage
@@ -17,7 +18,7 @@ src/
   scenario.py        - Scenario stress testing with deterministic P&L
   tui/
     app.py           - Main Textual TUI application
-    widgets.py       - Custom widgets (OrderbookDisplay, CachedDataTable, ScenarioInput)
+    widgets.py       - Custom widgets (OrderbookDisplay, CachedDataTable, ScenarioInput, SettingsPanel)
     styles.tcss      - Textual CSS styling
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
@@ -29,6 +30,7 @@ tests/
   test_scenario.py      - Worst case P&L, no-overlap zero impact, JSON loading
   test_book_state.py    - Orderbook delta application, PnL, mid price updates
   test_ws_client.py     - WS message parsing, BookState integration
+  test_collector.py     - PID management, process lifecycle, stale PID detection
 ```
 
 ## Feature Status
@@ -41,6 +43,7 @@ tests/
 - [x] Feature 7 — Scenario Engine
 - [x] WebSocket Integration
 - [x] TUI (Textual-based terminal UI)
+- [x] Background NAV Collector
 
 ## Implemented: Feature 6 — Unified Position Feed
 
@@ -134,13 +137,39 @@ Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7,
 
 **Startup flow.** Positions and orderbooks fetched via REST once at startup (reliable, complete). Websocket connects after, subscribing to all held tickers. Future updates arrive via WS, keeping state fresh without polling.
 
+## Implemented: NAV Display + Historical Chart
+
+**NAV computation.** `BookState.compute_nav()` = `cash_balance + Σ(qty × current_mid)`. Uses live mid prices from websocket-updated orderbooks rather than the static `portfolio_value` from REST. Displayed in the header subtitle bar.
+
+**Persistence.** `NavStore` in `src/nav_store.py` — SQLite (stdlib `sqlite3`) with WAL mode, stored at `data/nav.db`. Records NAV snapshots every 60 seconds plus once at startup. Schema: `nav_snapshots(timestamp_utc, nav, cash, portfolio_value, unrealized_pnl, position_count)`.
+
+**Chart.** `NavChart` widget in the Positions tab using `textual-plotext`. Time range selector buttons (1H through 5Y, default 1W). Queries up to 500 points per range with bucket-average downsampling when data exceeds that. Auto-refreshes every 60s with the recording timer and on manual `r` key refresh.
+
+**Data retention.** No automatic pruning — SQLite file grows unbounded. At one row per minute that's ~500KB/year, negligible.
+
+## Implemented: Background NAV Collector
+
+**Problem.** NAV snapshots only recorded while the TUI is running. Gaps in data whenever the app is closed.
+
+**Solution.** `src/collector.py` — a detached OS process that polls Kalshi REST every 60s, computes NAV, and writes to the same `data/nav.db` SQLite. Survives TUI exit.
+
+**Process management.** PID file at `data/collector.pid`. Cross-platform: `start_new_session=True` on Unix, `CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS` on Windows. `stop` sends SIGTERM (Unix) or TerminateProcess (Windows). Stale PID files detected and cleaned automatically.
+
+**CLI.** `python -m src.collector start|stop|status [--interval 60]`
+
+**TUI integration.** Settings tab (tab 8) provides collector controls: ON/OFF toggle buttons and interval selector (1m, 5m, 30m, 1hr, 24hr). Changing interval while running auto-restarts the collector. `c` keybinding also toggles collector on/off. Status shown in subtitle bar (`Collector:ON/OFF`). Calls importable `start_collector()` / `stop_collector()` / `collector_status()` functions.
+
+**Why REST not WS?** For 1-minute snapshots, a single `get_positions()` + `get_balance()` REST cycle is simpler and sufficient. WS requires async machinery and persistent connections.
+
+**PID cleanup safety.** Child's atexit handler checks that PID file still contains its own PID before deleting, preventing a race where stop→start→old atexit would remove the new process's PID file.
+
 ## Implemented: TUI (Textual)
 
 **Framework.** Textual 8.x — async Python TUI framework. Single event loop manages both websocket and UI rendering.
 
 **Layout.** Header (title + clock + subtitle with position count/PnL/WS status) → full-width tabbed content → footer (keybindings).
 
-**Tabs.** 7 views: Positions, Orderbook, VaR/Risk, Kelly, Scenarios, Liquidity, Docs. Switchable via number keys 1-7.
+**Tabs.** 8 views: Positions, Orderbook, VaR/Risk, Kelly, Scenarios, Liquidity, Docs, Settings. Switchable via number keys 1-8.
 
 **Performance.** UI updates debounced at 150ms to prevent rapid WS deltas from flooding the renderer. Risk computations (VaR Monte Carlo, Kelly optimization, liquidity metrics) run in Textual thread workers, not on the UI thread. Recomputed every 10s or on manual refresh (r key).
 

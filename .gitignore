@@ -37,6 +37,9 @@ Desktop.ini
 .vscode/
 *.code-workspace
 
+# data (SQLite NAV history)
+data/
+
 # logs
 *.log
 

@@ -14,7 +14,9 @@ from textual.widgets import (
 from textual.worker import Worker, WorkerState
 
 from src.book_state import BookState
-from src.tui.widgets import OrderbookDisplay, CachedDataTable, ScenarioInput
+from src.nav_store import NavStore, NavSnapshot
+from src.collector import collector_status, start_collector, stop_collector
+from src.tui.widgets import OrderbookDisplay, CachedDataTable, ScenarioInput, NavChart, SettingsPanel
 from src.tui.nav import PageNavMixin, NAV_BINDINGS
 
 CSS_PATH = Path(__file__).parent / "styles.tcss"
@@ -35,6 +37,7 @@ class RiskDeskApp(PageNavMixin, App):
     BINDINGS = [
         Binding("q", "quit", "Quit", priority=True),
         Binding("r", "refresh", "Refresh", priority=True),
+        Binding("c", "toggle_collector", "Collector", priority=True),
         Binding("1", "tab('positions')", "1:Pos", show=True),
         Binding("2", "tab('orderbook')", "2:Book", show=True),
         Binding("3", "tab('var')", "3:VaR", show=True),
@@ -42,13 +45,15 @@ class RiskDeskApp(PageNavMixin, App):
         Binding("5", "tab('scenarios')", "5:Scen", show=True),
         Binding("6", "tab('liquidity')", "6:Liq", show=True),
         Binding("7", "tab('docs')", "7:Docs", show=True),
+        Binding("8", "tab('settings')", "8:Set", show=True),
         Binding("escape", "focus_tabs", "Nav", show=False),
         *NAV_BINDINGS,
     ]
 
-    def __init__(self, book_state: BookState, **kwargs):
+    def __init__(self, book_state: BookState, nav_store: NavStore | None = None, **kwargs):
         super().__init__(**kwargs)
         self.book_state = book_state
+        self.nav_store = nav_store
         self._selected_ticker: str | None = None
         self._var_result = None
         self._kelly_result = None
@@ -63,6 +68,7 @@ class RiskDeskApp(PageNavMixin, App):
         with TabbedContent(id="content-area"):
             with TabPane("Positions", id="positions"):
                 yield CachedDataTable(id="positions-table")
+                yield NavChart(nav_store=self.nav_store, id="nav-chart")
             with TabPane("Orderbook", id="orderbook"):
                 yield CachedDataTable(id="ob-positions-table")
                 yield OrderbookDisplay()
@@ -77,6 +83,8 @@ class RiskDeskApp(PageNavMixin, App):
                 yield CachedDataTable(id="liquidity-table")
             with TabPane("Docs", id="docs"):
                 yield VerticalScroll(Static(id="docs-content"), id="docs-panel")
+            with TabPane("Settings", id="settings"):
+                yield SettingsPanel(id="settings-panel")
         yield Footer()
 
     def on_mount(self):
@@ -110,6 +118,9 @@ class RiskDeskApp(PageNavMixin, App):
 
         self._update_timer = self.set_interval(2.0, self._periodic_refresh)
         self.set_interval(10.0, self._run_risk_computations)
+        self.set_interval(60.0, self._record_nav_snapshot)
+
+        self._record_nav_snapshot()
 
         if self.book_state.positions:
             self._run_risk_computations()
@@ -140,12 +151,33 @@ class RiskDeskApp(PageNavMixin, App):
         n = len(self.book_state.positions)
         ws = "WS:ON" if self.book_state.ws_connected else "WS:OFF"
         pnl = self.book_state.get_total_pnl()
-        self.sub_title = f"{n} positions | PnL: ${pnl:+.2f} | {ws}"
+        nav = self.book_state.compute_nav()
+        coll = "Collector:ON" if collector_status() else "Collector:OFF"
+        self.sub_title = f"NAV: ${nav:,.2f} | {n} positions | PnL: ${pnl:+.2f} | {coll} | {ws}"
 
     def _periodic_refresh(self):
         self._refresh_positions_table()
         self._refresh_ob_positions_table()
         self._update_subtitle()
+
+    def _record_nav_snapshot(self):
+        if self.nav_store is None:
+            return
+        nav = self.book_state.compute_nav()
+        pnl = self.book_state.get_total_pnl()
+        snap = NavSnapshot(
+            timestamp_utc=time.time(),
+            nav=nav,
+            cash=self.book_state.cash_balance,
+            portfolio_value=self.book_state.portfolio_value,
+            unrealized_pnl=pnl,
+            position_count=len(self.book_state.positions),
+        )
+        self.nav_store.record(snap)
+        try:
+            self.query_one("#nav-chart", NavChart).replot()
+        except Exception:
+            pass
 
     def _refresh_positions_table(self):
         rows, keys = [], []
@@ -498,9 +530,24 @@ class RiskDeskApp(PageNavMixin, App):
         t.append("             Near-expiry. Very tight window to exit.\n")
         t.append("             Exits may face severe slippage.\n\n")
 
+        t.append("7. SETTINGS\n", style="bold cyan")
+        t.append("-" * 40 + "\n")
+        t.append("Controls for the background NAV collector.\n\n")
+        t.append("  ON / OFF  ", style="bold")
+        t.append("Start or stop the background collector process.\n")
+        t.append("            The collector is a detached OS process that\n")
+        t.append("            polls the Kalshi REST API, computes NAV, and\n")
+        t.append("            writes snapshots to data/nav.db. It survives\n")
+        t.append("            TUI exit so NAV history has no gaps.\n\n")
+        t.append("  Interval  ", style="bold")
+        t.append("How often the collector polls. Options:\n")
+        t.append("            1m (default), 5m, 30m, 1hr, 24hr.\n")
+        t.append("            Changing the interval while the collector\n")
+        t.append("            is running restarts it automatically.\n\n")
+
         t.append("KEYBINDINGS\n", style="bold cyan")
         t.append("-" * 40 + "\n")
-        t.append("  1-7       Switch tabs (1:Pos … 6:Liq 7:Docs)\n")
+        t.append("  1-8       Switch tabs (1:Pos … 7:Docs 8:Settings)\n")
         t.append("  r         Refresh risk computations\n")
         t.append("  arrows    Navigate within/between panels\n")
         t.append("  escape    Return focus to tab bar\n")
@@ -578,7 +625,20 @@ class RiskDeskApp(PageNavMixin, App):
     def action_refresh(self):
         self._refresh_positions_table()
         self._run_risk_computations()
+        try:
+            self.query_one("#nav-chart", NavChart).replot()
+        except Exception:
+            pass
         self.notify("Refreshing risk computations...", timeout=2)
+
+    def action_toggle_collector(self):
+        if collector_status():
+            stop_collector()
+            self.notify("Collector stopped", timeout=2)
+        else:
+            start_collector()
+            self.notify("Collector started", timeout=2)
+        self._update_subtitle()
 
     def action_tab(self, tab_id: str):
         tabs = self.query_one(TabbedContent)
@@ -586,6 +646,15 @@ class RiskDeskApp(PageNavMixin, App):
 
     def action_focus_tabs(self):
         self.query_one(Tabs).focus()
+
+    def on_settings_panel_collector_toggled(self, event: SettingsPanel.CollectorToggled):
+        self._update_subtitle()
+        state = "started" if event.running else "stopped"
+        self.notify(f"Collector {state}", timeout=2)
+
+    def on_settings_panel_interval_changed(self, event: SettingsPanel.IntervalChanged):
+        self._update_subtitle()
+        self.notify(f"Interval set to {event.label}", timeout=2)
 
     def on_scenario_input_submitted(self, event: ScenarioInput.Submitted):
         from src.scenario import append_scenario_to_json

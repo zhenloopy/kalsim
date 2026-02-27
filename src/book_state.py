@@ -211,6 +211,12 @@ class BookState:
             return None
         return compute_mid_from_orderbook(ob)
 
+    def compute_nav(self) -> float:
+        nav = self.cash_balance
+        for pos in self.positions:
+            nav += pos.quantity * pos.current_mid
+        return nav
+
     def get_total_pnl(self) -> float:
         total = 0.0
         for pos in self.positions:
