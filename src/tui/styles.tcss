@@ -32,6 +32,39 @@ DataTable > .datatable--cursor {
     height: 1fr;
 }
 
+#nav-chart {
+    height: 2fr;
+}
+
+#nav-range-bar {
+    height: auto;
+    padding: 0 1;
+}
+
+#nav-range-bar Button {
+    min-width: 4;
+    width: auto;
+    height: 1;
+    margin: 0 0;
+    padding: 0 1;
+    border: none;
+}
+
+.range-btn {
+    background: $surface;
+    color: $text-muted;
+}
+
+.range-btn-active {
+    background: $accent;
+    color: white;
+    text-style: bold;
+}
+
+#nav-plot {
+    height: 1fr;
+}
+
 #orderbook-container {
     layout: horizontal;
     height: 1fr;
@@ -149,4 +182,74 @@ TabbedContent {
 
 #docs-panel {
     padding: 1 2;
+}
+
+#settings-panel {
+    padding: 1 2;
+}
+
+#settings-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#collector-section-label {
+    text-style: bold;
+    margin-top: 1;
+}
+
+#interval-section-label {
+    text-style: bold;
+    margin-top: 1;
+}
+
+#collector-controls {
+    height: auto;
+    padding: 0 0;
+}
+
+#collector-controls Button {
+    min-width: 6;
+    width: auto;
+    height: 1;
+    margin: 0 1 0 0;
+    padding: 0 1;
+    border: none;
+}
+
+#collector-status-display {
+    height: auto;
+    margin-top: 0;
+}
+
+#interval-bar {
+    height: auto;
+    padding: 0 0;
+}
+
+#interval-bar Button {
+    min-width: 4;
+    width: auto;
+    height: 1;
+    margin: 0 0;
+    padding: 0 1;
+    border: none;
+}
+
+.interval-btn {
+    background: $surface;
+    color: $text-muted;
+}
+
+.interval-btn-active {
+    background: $accent;
+    color: white;
+    text-style: bold;
+}
+
+#interval-status-display {
+    height: auto;
+    margin-top: 0;
+    color: $text-muted;
 }
