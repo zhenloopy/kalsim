@@ -103,7 +103,7 @@ DataTable > .datatable--cursor {
 
 #ob-bids {
     width: 50%;
-    border-right: thin $primary-background;
+    border-right: solid $primary-background;
 }
 
 #ob-asks {
@@ -174,4 +174,9 @@ TabPane {
 
 TabbedContent {
     height: 1fr;
+}
+
+#ob-positions-table {
+    height: 10;
+    max-height: 10;
 }

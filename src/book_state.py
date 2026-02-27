@@ -1,8 +1,11 @@
 import asyncio
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
 from src.schema import Position
 from src.position_feed import compute_mid_from_orderbook, fee_adjusted_breakeven
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -107,17 +110,63 @@ class BookState:
         self._last_update = datetime.now(timezone.utc)
         self._notify()
 
-    def apply_fill(self, ticker: str, side: str, count: int, price_cents: int):
-        """Update position from a fill message."""
+    def apply_fill(self, ticker: str, side: str, count: int, price_cents: int) -> str | None:
+        """Update position from a fill message.
+
+        Returns the ticker if a new position was created, None otherwise.
+        """
         for pos in self.positions:
             if pos.contract_id == ticker:
                 if side == "yes":
                     pos.quantity += count
                 else:
                     pos.quantity -= count
-                break
+                self._last_update = datetime.now(timezone.utc)
+                self._notify()
+                return None
+
+        entry = price_cents / 100.0 if price_cents > 1 else price_cents
+        quantity = count if side == "yes" else -count
+        mid = entry
+        placeholder_resolve = datetime.now(timezone.utc) + timedelta(days=365)
+
+        pos = Position(
+            contract_id=ticker,
+            platform="kalshi",
+            canonical_event_id=ticker,
+            quantity=quantity,
+            entry_price=entry,
+            current_mid=mid,
+            market_prob=mid,
+            model_prob=mid,
+            edge=0.0,
+            resolves_at=placeholder_resolve,
+            tte_days=365.0,
+            fee_adjusted_breakeven=fee_adjusted_breakeven(mid, 0.07, quantity > 0),
+        )
+        self.positions.append(pos)
+        logger.info(f"New position created from fill: {ticker} qty={quantity} entry={entry}")
         self._last_update = datetime.now(timezone.utc)
         self._notify()
+        return ticker
+
+    def update_position_metadata(self, ticker: str, market: dict, orderbook: dict):
+        """Fill in full market metadata for a position created from a fill."""
+        for pos in self.positions:
+            if pos.contract_id == ticker:
+                close_time = market.get("close_time", market.get("expiration_time", ""))
+                if close_time:
+                    resolves_at = datetime.fromisoformat(close_time.replace("Z", "+00:00"))
+                    pos.resolves_at = resolves_at
+                    pos.tte_days = max((resolves_at - datetime.now(timezone.utc)).total_seconds() / 86400.0, 0.0)
+
+                pos.canonical_event_id = market.get("event_ticker", market.get("series_ticker", ticker))
+                self.market_meta[ticker] = market
+
+                yes_levels = orderbook.get("yes", [])
+                no_levels = orderbook.get("no", [])
+                self.apply_orderbook_snapshot(ticker, yes_levels, no_levels)
+                break
 
     def _update_position_mid(self, ticker: str):
         """Recompute mid price for a position from its orderbook."""

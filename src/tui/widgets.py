@@ -4,8 +4,28 @@ from textual.reactive import reactive
 from rich.text import Text
 
 
+class CachedDataTable(DataTable):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cached_rows: list[tuple] = []
+
+    def update_rows(self, rows: list[tuple], keys: list[str] | None = None):
+        if rows == self._cached_rows:
+            return
+        self._cached_rows = list(rows)
+        saved_row = self.cursor_row
+        self.clear()
+        for i, row in enumerate(rows):
+            key = keys[i] if keys else None
+            self.add_row(*row, key=key)
+        if self.row_count > 0:
+            self.move_cursor(row=min(max(0, saved_row), self.row_count - 1), animate=False)
+
+
 class RiskSidebar(Vertical):
     """Always-visible risk summary sidebar."""
+
+    nav_skip = True
 
     var_95 = reactive(0.0)
     var_99 = reactive(0.0)
@@ -100,41 +120,46 @@ class RiskSidebar(Vertical):
 class OrderbookDisplay(Vertical):
     """Live orderbook visualization for a selected contract."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_ticker: str | None = None
+
     def compose(self):
         yield Label("Select a position to view orderbook", id="ob-ticker-label")
         with Horizontal(id="orderbook-container"):
-            yield DataTable(id="ob-bids")
-            yield DataTable(id="ob-asks")
+            yield CachedDataTable(id="ob-bids")
+            yield CachedDataTable(id="ob-asks")
 
     def on_mount(self):
-        bids = self.query_one("#ob-bids", DataTable)
+        bids = self.query_one("#ob-bids", CachedDataTable)
         bids.add_columns("Bid Qty", "Bid Price")
         bids.cursor_type = "row"
 
-        asks = self.query_one("#ob-asks", DataTable)
+        asks = self.query_one("#ob-asks", CachedDataTable)
         asks.add_columns("Ask Price", "Ask Qty")
         asks.cursor_type = "row"
 
     def update_orderbook(self, ticker: str, orderbook: dict | None):
-        label = self.query_one("#ob-ticker-label", Label)
-        label.update(f"Orderbook: {ticker}")
-
-        bids_table = self.query_one("#ob-bids", DataTable)
-        asks_table = self.query_one("#ob-asks", DataTable)
-
-        bids_table.clear()
-        asks_table.clear()
+        if ticker != self._last_ticker:
+            self.query_one("#ob-ticker-label", Label).update(f"Orderbook: {ticker}")
+            self._last_ticker = ticker
 
         if orderbook is None:
+            self.query_one("#ob-bids", CachedDataTable).update_rows([])
+            self.query_one("#ob-asks", CachedDataTable).update_rows([])
             return
 
         yes_levels = orderbook.get("yes", [])
         no_levels = orderbook.get("no", [])
 
-        for price, qty in yes_levels[:15]:
-            p = price / 100.0 if price > 1 else price
-            bids_table.add_row(str(qty), f"{p:.2f}")
+        bid_rows = [
+            (str(qty), f"{(price / 100.0 if price > 1 else price):.2f}")
+            for price, qty in yes_levels[:15]
+        ]
+        ask_rows = [
+            (f"{(1.0 - (price / 100.0 if price > 1 else price)):.2f}", str(qty))
+            for price, qty in no_levels[:15]
+        ]
 
-        for price, qty in no_levels[:15]:
-            ask_price = 1.0 - (price / 100.0 if price > 1 else price)
-            asks_table.add_row(f"{ask_price:.2f}", str(qty))
+        self.query_one("#ob-bids", CachedDataTable).update_rows(bid_rows)
+        self.query_one("#ob-asks", CachedDataTable).update_rows(ask_rows)

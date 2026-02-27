@@ -171,12 +171,32 @@ class TestFillHandling:
         state.apply_fill("T", "no", 5, 50)
         assert state.positions[0].quantity == -15
 
-    def test_fill_on_unknown_ticker_no_crash(self):
+    def test_fill_on_unknown_ticker_creates_position(self):
         state = BookState()
         pos = _make_position("T", quantity=10)
         state.set_positions([pos])
-        state.apply_fill("UNKNOWN", "yes", 5, 50)
-        assert state.positions[0].quantity == 10  # unchanged
+        new_ticker = state.apply_fill("UNKNOWN", "yes", 5, 50)
+        assert new_ticker == "UNKNOWN"
+        assert state.positions[0].quantity == 10
+        assert len(state.positions) == 2
+        assert state.positions[1].contract_id == "UNKNOWN"
+        assert state.positions[1].quantity == 5
+        assert state.positions[1].entry_price == 0.5
+
+    def test_fill_on_unknown_ticker_no_side(self):
+        state = BookState()
+        new_ticker = state.apply_fill("NEW", "no", 3, 93)
+        assert new_ticker == "NEW"
+        assert len(state.positions) == 1
+        assert state.positions[0].quantity == -3
+        assert state.positions[0].entry_price == 0.93
+
+    def test_fill_on_existing_returns_none(self):
+        state = BookState()
+        pos = _make_position("T", quantity=10)
+        state.set_positions([pos])
+        result = state.apply_fill("T", "yes", 5, 50)
+        assert result is None
 
 
 class TestCallbacks:

@@ -5,12 +5,20 @@ Fetches positions via REST at startup, connects websocket for live updates,
 and launches an interactive terminal UI for portfolio risk management.
 """
 import asyncio
+import logging
 import os
 import sys
 import signal
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(
+    filename="kalsim.log",
+    level=logging.DEBUG,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 def check_credentials():

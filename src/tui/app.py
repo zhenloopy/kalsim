@@ -7,20 +7,26 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.widgets import (
-    Header, Footer, Static, DataTable, Label, TabbedContent, TabPane,
+    Header, Footer, Static, DataTable, Label, TabbedContent, TabPane, Tabs,
 )
 from textual.worker import Worker, WorkerState
 
 from src.book_state import BookState
-from src.tui.widgets import RiskSidebar, OrderbookDisplay
+from src.tui.widgets import RiskSidebar, OrderbookDisplay, CachedDataTable
+from src.tui.nav import PageNavMixin, NAV_BINDINGS
 
 CSS_PATH = Path(__file__).parent / "styles.tcss"
 
 UI_DEBOUNCE_MS = 150
 
 
-class RiskDeskApp(App):
+class BookUpdated(Message):
+    pass
+
+
+class RiskDeskApp(PageNavMixin, App):
     """kalsim Risk Desk — TUI for prediction market portfolio management."""
 
     TITLE = "kalsim Risk Desk"
@@ -35,7 +41,8 @@ class RiskDeskApp(App):
         Binding("4", "tab('kelly')", "4:Kelly", show=True),
         Binding("5", "tab('scenarios')", "5:Scen", show=True),
         Binding("6", "tab('liquidity')", "6:Liq", show=True),
-        Binding("escape", "deselect", "Deselect", show=False),
+        Binding("escape", "focus_tabs", "Nav", show=False),
+        *NAV_BINDINGS,
     ]
 
     def __init__(self, book_state: BookState, **kwargs):
@@ -55,8 +62,9 @@ class RiskDeskApp(App):
         with Horizontal(id="main-container"):
             with TabbedContent(id="content-area"):
                 with TabPane("Positions", id="positions"):
-                    yield DataTable(id="positions-table")
+                    yield CachedDataTable(id="positions-table")
                 with TabPane("Orderbook", id="orderbook"):
+                    yield CachedDataTable(id="ob-positions-table")
                     yield OrderbookDisplay()
                 with TabPane("VaR/Risk", id="var"):
                     yield VerticalScroll(Static(id="var-content"), id="var-panel")
@@ -65,22 +73,36 @@ class RiskDeskApp(App):
                 with TabPane("Scenarios", id="scenarios"):
                     yield VerticalScroll(Static(id="scenario-content"), id="scenario-panel")
                 with TabPane("Liquidity", id="liquidity"):
-                    yield DataTable(id="liquidity-table")
+                    yield CachedDataTable(id="liquidity-table")
             yield RiskSidebar(id="sidebar")
         yield Footer()
 
     def on_mount(self):
-        table = self.query_one("#positions-table", DataTable)
+        table = self.query_one("#positions-table", CachedDataTable)
         table.add_columns("Contract", "Qty", "Entry", "Mid", "Edge", "PnL", "TTE", "Flag")
         table.cursor_type = "row"
 
-        liq_table = self.query_one("#liquidity-table", DataTable)
+        ob_table = self.query_one("#ob-positions-table", CachedDataTable)
+        ob_table.add_columns("Contract", "Qty", "Mid")
+        ob_table.cursor_type = "row"
+
+        liq_table = self.query_one("#liquidity-table", CachedDataTable)
         liq_table.add_columns("Contract", "Spread%", "BidDepth", "AskDepth", "Slippage", "Flag")
         liq_table.cursor_type = "row"
 
-        self.book_state.on_change(self._schedule_ui_update)
+        try:
+            tabs_widget = self.query_one(Tabs)
+            _orig = tabs_widget._highlight_active
+            def _no_anim(animate=True):
+                _orig(animate=False)
+            tabs_widget._highlight_active = _no_anim
+        except Exception:
+            pass
+
+        self.book_state.on_change(lambda: self.post_message(BookUpdated()))
 
         self._refresh_positions_table()
+        self._refresh_ob_positions_table()
         self._refresh_sidebar()
         self._update_subtitle()
 
@@ -90,8 +112,8 @@ class RiskDeskApp(App):
         if self.book_state.positions:
             self._run_risk_computations()
 
-    def _schedule_ui_update(self):
-        """Called from BookState on any change. Debounces to avoid flooding UI."""
+    def on_book_updated(self, event: BookUpdated):
+        """Handles BookState changes routed through Textual's message queue."""
         now = time.monotonic()
         if now - self._last_ui_update < UI_DEBOUNCE_MS / 1000.0:
             if not self._debounce_pending:
@@ -108,6 +130,7 @@ class RiskDeskApp(App):
 
     def _on_book_update(self):
         self._refresh_positions_table()
+        self._refresh_ob_positions_table()
         self._refresh_sidebar()
         self._refresh_orderbook()
         self._update_subtitle()
@@ -120,31 +143,30 @@ class RiskDeskApp(App):
 
     def _periodic_refresh(self):
         self._refresh_positions_table()
+        self._refresh_ob_positions_table()
         self._refresh_sidebar()
         self._update_subtitle()
 
     def _refresh_positions_table(self):
-        table = self.query_one("#positions-table", DataTable)
-        table.clear()
-
+        rows, keys = [], []
         for pos in self.book_state.positions:
             pnl = self.book_state.get_position_pnl(pos)
             flag = self._get_flag_for(pos.contract_id)
+            rows.append((
+                pos.contract_id, str(pos.quantity),
+                f"{pos.entry_price:.2f}", f"{pos.current_mid:.2f}",
+                f"{pos.edge:+.3f}", f"${pnl:+.2f}",
+                f"{pos.tte_days:.1f}d", flag,
+            ))
+            keys.append(pos.contract_id)
+        self.query_one("#positions-table", CachedDataTable).update_rows(rows, keys)
 
-            pnl_str = f"${pnl:+.2f}"
-            tte_str = f"{pos.tte_days:.1f}d"
-
-            table.add_row(
-                pos.contract_id,
-                str(pos.quantity),
-                f"{pos.entry_price:.2f}",
-                f"{pos.current_mid:.2f}",
-                f"{pos.edge:+.3f}",
-                pnl_str,
-                tte_str,
-                flag,
-                key=pos.contract_id,
-            )
+    def _refresh_ob_positions_table(self):
+        rows, keys = [], []
+        for pos in self.book_state.positions:
+            rows.append((pos.contract_id, str(pos.quantity), f"{pos.current_mid:.2f}"))
+            keys.append(pos.contract_id)
+        self.query_one("#ob-positions-table", CachedDataTable).update_rows(rows, keys)
 
     def _get_flag_for(self, contract_id: str) -> str:
         for m in self._liquidity_metrics:
@@ -221,18 +243,15 @@ class RiskDeskApp(App):
         content.update(t)
 
     def _refresh_liquidity_table(self):
-        table = self.query_one("#liquidity-table", DataTable)
-        table.clear()
+        rows, keys = [], []
         for m in self._liquidity_metrics:
-            table.add_row(
-                m.contract_id,
-                f"{m.spread_pct:.3f}",
-                str(m.depth_at_best_bid),
-                str(m.depth_at_best_ask),
-                f"${m.liquidation_slippage:.2f}",
-                m.liquidity_flag,
-                key=m.contract_id,
-            )
+            rows.append((
+                m.contract_id, f"{m.spread_pct:.3f}",
+                str(m.depth_at_best_bid), str(m.depth_at_best_ask),
+                f"${m.liquidation_slippage:.2f}", m.liquidity_flag,
+            ))
+            keys.append(m.contract_id)
+        self.query_one("#liquidity-table", CachedDataTable).update_rows(rows, keys)
 
     def _refresh_scenario_panel(self):
         content = self.query_one("#scenario-content", Static)
@@ -325,14 +344,14 @@ class RiskDeskApp(App):
     def _post_risk_refresh(self):
         self._refresh_sidebar()
         self._refresh_positions_table()
+        self._refresh_ob_positions_table()
         self._refresh_var_panel()
         self._refresh_kelly_panel()
         self._refresh_liquidity_table()
         self._refresh_scenario_panel()
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected):
-        """When user selects a position row, show its orderbook."""
-        if event.data_table.id == "positions-table":
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted):
+        if event.data_table.id == "ob-positions-table":
             row_key = event.row_key
             self._selected_ticker = str(row_key.value) if row_key else None
             self._refresh_orderbook()
@@ -349,7 +368,5 @@ class RiskDeskApp(App):
         tabs = self.query_one(TabbedContent)
         tabs.active = tab_id
 
-    def action_deselect(self):
-        self._selected_ticker = None
-        ob_display = self.query_one(OrderbookDisplay)
-        ob_display.update_orderbook("(none selected)", None)
+    def action_focus_tabs(self):
+        self.query_one(Tabs).focus()

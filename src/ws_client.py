@@ -127,6 +127,7 @@ class KalshiWS:
             "params": {"channels": [channel], **params},
         }
         if self._ws:
+            logger.info(f"Subscribing: {msg}")
             await self._ws.send(json.dumps(msg))
 
     async def subscribe_tickers(self, tickers: list[str]):
@@ -139,6 +140,7 @@ class KalshiWS:
     def _handle_message(self, msg):
         msg_type = msg.get("type", "")
         data = msg.get("msg", {})
+        logger.debug(f"WS recv type={msg_type} data={data}")
 
         if msg_type == "orderbook_snapshot":
             ticker = data.get("market_ticker", "")
@@ -162,9 +164,23 @@ class KalshiWS:
             side = data.get("side", "yes")
             count = data.get("count", 0)
             price = data.get("yes_price", data.get("no_price", 0))
-            self.book_state.apply_fill(ticker, side, count, price)
+            new_ticker = self.book_state.apply_fill(ticker, side, count, price)
+            if new_ticker:
+                asyncio.create_task(self._on_new_position(new_ticker))
 
         elif msg_type == "error":
             code = data.get("code", "?")
             emsg = data.get("msg", "unknown")
             logger.error(f"WS error {code}: {emsg}")
+
+    async def _on_new_position(self, ticker: str):
+        await self.subscribe_tickers([ticker])
+        try:
+            from src.kalshi_client import KalshiClient
+            client = await asyncio.to_thread(KalshiClient, self.config)
+            market = await asyncio.to_thread(client.get_market, ticker)
+            orderbook = await asyncio.to_thread(client.get_orderbook, ticker)
+            self.book_state.update_position_metadata(ticker, market, orderbook)
+            logger.info(f"Fetched metadata for new position: {ticker}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch metadata for {ticker}: {e}")
