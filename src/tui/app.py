@@ -33,6 +33,7 @@ class RiskDeskApp(PageNavMixin, App):
 
     TITLE = "kalsim Risk Desk"
     CSS_PATH = CSS_PATH
+    ENABLE_COMMAND_PALETTE = False
 
     BINDINGS = [
         Binding("q", "quit", "Quit", priority=True),
