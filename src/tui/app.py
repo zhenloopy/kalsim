@@ -190,6 +190,7 @@ class RiskDeskApp(PageNavMixin, App):
             sidebar.var_95 = self._var_result.var_95
             sidebar.var_99 = self._var_result.var_99
             sidebar.cvar_95 = self._var_result.cvar_95
+            sidebar.cvar_99 = self._var_result.cvar_99
             sidebar.p_ruin = self._var_result.p_ruin
 
         flags = []
@@ -218,6 +219,7 @@ class RiskDeskApp(PageNavMixin, App):
         t.append(f"  VaR 95:   ${r.var_95:>10.2f}\n", style="bold")
         t.append(f"  VaR 99:   ${r.var_99:>10.2f}\n", style="bold")
         t.append(f"  CVaR 95:  ${r.cvar_95:>10.2f}\n", style="bold")
+        t.append(f"  CVaR 99:  ${r.cvar_99:>10.2f}\n", style="bold")
         t.append(f"  P(ruin):  {r.p_ruin:>11.4f}\n\n", style="bold")
 
         t.append("COMPONENT VAR\n", style="bold cyan")
@@ -367,10 +369,14 @@ class RiskDeskApp(PageNavMixin, App):
         t.append("Conditional VaR (Expected Shortfall). Average loss\n")
         t.append("            in the worst 5% of scenarios. Always ≥ VaR 95.\n")
         t.append("            Answers: \"when things go bad, how bad?\"\n")
+        t.append("  CVaR 99   ", style="bold")
+        t.append("Average loss in the worst 1% of scenarios.\n")
+        t.append("            More extreme tail measure than CVaR 95.\n\n")
         t.append("  P(ruin)   ", style="bold")
-        t.append("Fraction of simulations where total loss ≥ total\n")
-        t.append("            capital at risk. Capital at risk =\n")
-        t.append("            Σ |qty| × entry_price across all positions.\n")
+        t.append("Fraction of simulations where total loss ≥ max\n")
+        t.append("            possible loss across all active positions.\n")
+        t.append("            Max loss: Σ |qty|×entry for longs,\n")
+        t.append("            Σ |qty|×(1−entry) for shorts. Cash excluded.\n")
         t.append("            A P(ruin) of 0.02 means 2% of simulations\n")
         t.append("            wiped out your entire invested capital.\n\n")
         t.append("Component VaR:\n", style="bold")
@@ -492,7 +498,7 @@ class RiskDeskApp(PageNavMixin, App):
 
         corr = np.eye(n)
         try:
-            var_result = simulate_pnl(pos_dicts, corr, n_sims=20_000, seed=42)
+            var_result = simulate_pnl(pos_dicts, corr, n_sims=100_000, seed=42)
             self._var_result = var_result
         except Exception:
             pass

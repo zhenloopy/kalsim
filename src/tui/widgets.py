@@ -30,6 +30,7 @@ class RiskSidebar(Vertical):
     var_95 = reactive(0.0)
     var_99 = reactive(0.0)
     cvar_95 = reactive(0.0)
+    cvar_99 = reactive(0.0)
     p_ruin = reactive(0.0)
     total_pnl = reactive(0.0)
     ws_status = reactive(False)
@@ -51,6 +52,8 @@ class RiskSidebar(Vertical):
         t.append(f"${self.var_99:>8.2f}\n", style="bold red" if self.var_99 > 0 else "bold green")
         t.append("CVaR 95: ", style="dim")
         t.append(f"${self.cvar_95:>8.2f}\n", style="bold red" if self.cvar_95 > 0 else "bold green")
+        t.append("CVaR 99: ", style="dim")
+        t.append(f"${self.cvar_99:>8.2f}\n", style="bold red" if self.cvar_99 > 0 else "bold green")
         t.append("P(ruin): ", style="dim")
         style = "bold red" if self.p_ruin > 0.01 else "bold yellow" if self.p_ruin > 0.001 else "bold green"
         t.append(f"  {self.p_ruin:>7.4f}\n", style=style)
@@ -96,6 +99,9 @@ class RiskSidebar(Vertical):
         self._render_risk()
 
     def watch_cvar_95(self, _):
+        self._render_risk()
+
+    def watch_cvar_99(self, _):
         self._render_risk()
 
     def watch_p_ruin(self, _):
