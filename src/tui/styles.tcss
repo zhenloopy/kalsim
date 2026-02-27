@@ -1,0 +1,186 @@
+Screen {
+    background: $surface;
+}
+
+#main-container {
+    layout: horizontal;
+}
+
+#content-area {
+    width: 70%;
+    height: 100%;
+}
+
+#sidebar {
+    width: 30%;
+    height: 100%;
+    border-left: thick $accent;
+    padding: 1 2;
+}
+
+#sidebar-title {
+    text-style: bold;
+    color: $text;
+    text-align: center;
+    margin-bottom: 1;
+}
+
+.sidebar-section {
+    margin-bottom: 1;
+}
+
+.sidebar-label {
+    color: $text-muted;
+}
+
+.sidebar-value {
+    text-style: bold;
+}
+
+.risk-good {
+    color: $success;
+}
+
+.risk-warn {
+    color: $warning;
+}
+
+.risk-bad {
+    color: $error;
+}
+
+.flag-normal {
+    color: $success;
+}
+
+.flag-watch {
+    color: $warning;
+}
+
+.flag-critical {
+    color: $error;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary;
+    color: $text;
+    padding: 0 2;
+}
+
+.ws-connected {
+    color: $success;
+    text-style: bold;
+}
+
+.ws-disconnected {
+    color: $error;
+    text-style: bold;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+DataTable > .datatable--header {
+    text-style: bold;
+    background: $primary-background;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent 30%;
+}
+
+#positions-table {
+    height: 1fr;
+}
+
+#orderbook-container {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#ob-bids {
+    width: 50%;
+    border-right: solid $primary-background;
+}
+
+#ob-asks {
+    width: 50%;
+}
+
+.ob-header {
+    text-style: bold;
+    text-align: center;
+    background: $primary-background;
+    height: 1;
+    padding: 0 1;
+}
+
+#var-panel {
+    padding: 1 2;
+}
+
+#kelly-panel {
+    padding: 1 2;
+}
+
+#scenario-panel {
+    padding: 1 2;
+}
+
+#liquidity-panel {
+    padding: 1 2;
+}
+
+.panel-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+.metric-row {
+    layout: horizontal;
+    height: 1;
+}
+
+.metric-label {
+    width: 50%;
+    color: $text-muted;
+}
+
+.metric-value {
+    width: 50%;
+    text-style: bold;
+}
+
+Footer {
+    background: $primary-darken-1;
+}
+
+Header {
+    background: $primary;
+}
+
+ContentSwitcher {
+    height: 1fr;
+}
+
+TabPane {
+    height: 1fr;
+    padding: 0;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+#ob-positions-table {
+    height: 10;
+    max-height: 10;
+}
+
+#docs-panel {
+    padding: 1 2;
+}

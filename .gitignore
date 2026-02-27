@@ -37,6 +37,9 @@ Desktop.ini
 .vscode/
 *.code-workspace
 
+# logs
+*.log
+
 # build artifacts
 build/
 dist/

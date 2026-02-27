@@ -53,6 +53,12 @@ class KalshiClient:
         data = self._request("GET", f"/markets/{ticker}/orderbook")
         return data.get("orderbook", data)
 
+    def get_balance(self):
+        data = self._request("GET", "/portfolio/balance")
+        balance_cents = data.get("balance", 0)
+        portfolio_cents = data.get("portfolio_value", 0)
+        return balance_cents / 100.0, portfolio_cents / 100.0
+
     def get_market_history(self, ticker, limit=1000):
         try:
             data = self._request("GET", f"/markets/{ticker}/history", params={"limit": limit})

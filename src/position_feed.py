@@ -82,9 +82,12 @@ class PositionFeed:
         now = datetime.now(timezone.utc)
         tte_days = max((resolves_at - now).total_seconds() / 86400.0, 0.0)
 
-        entry_price = raw_pos.get("average_price_paid", raw_pos.get("resting_orders_count", 0))
-        if isinstance(entry_price, (int, float)) and entry_price > 1:
-            entry_price = entry_price / 100.0
+        market_exposure = raw_pos.get("market_exposure", 0)
+        abs_qty = abs(quantity)
+        if abs_qty > 0 and market_exposure:
+            entry_price = market_exposure / abs_qty / 100.0
+        else:
+            entry_price = mid
 
         market_prob = mid
         is_long = quantity > 0

@@ -5,7 +5,9 @@
 src/
   config.py          - Configuration (API credentials, fee rates)
   schema.py          - Pydantic Position model (canonical schema)
-  kalshi_client.py   - Kalshi REST API client
+  kalshi_client.py   - Kalshi REST API client (used for initial fetch)
+  ws_client.py       - Async websocket client for live streaming
+  book_state.py      - Shared in-memory state (positions, orderbooks, tickers)
   position_feed.py   - Normalizes raw Kalshi data → Position schema
   liquidity.py       - Per-position liquidity metrics from order book
   factor_model.py    - PCA factor decomposition with Ledoit-Wolf shrinkage
@@ -13,6 +15,10 @@ src/
   var_engine.py      - Monte Carlo VaR/CVaR with correlated binary resolution
   kelly.py           - Kelly criterion optimizer with constraints
   scenario.py        - Scenario stress testing with deterministic P&L
+  tui/
+    app.py           - Main Textual TUI application
+    widgets.py       - Custom widgets (RiskSidebar, OrderbookDisplay)
+    styles.tcss      - Textual CSS styling
 tests/
   test_position_feed.py - Fee math, schema validation, mid computation
   test_liquidity.py     - Slippage hand calculations, flag thresholds
@@ -21,6 +27,8 @@ tests/
   test_var_engine.py    - Single-contract VaR, CVaR subadditivity, slippage
   test_kelly.py         - Analytical Kelly recovery, constraints, cluster caps
   test_scenario.py      - Worst case P&L, no-overlap zero impact, JSON loading
+  test_book_state.py    - Orderbook delta application, PnL, mid price updates
+  test_ws_client.py     - WS message parsing, BookState integration
 ```
 
 ## Feature Status
@@ -31,6 +39,8 @@ tests/
 - [x] Feature 1 — VaR / CVaR Engine
 - [x] Feature 8 — Kelly Optimizer
 - [x] Feature 7 — Scenario Engine
+- [x] WebSocket Integration
+- [x] TUI (Textual-based terminal UI)
 
 ## Implemented: Feature 6 — Unified Position Feed
 
@@ -100,3 +110,34 @@ This is the probability at which expected value equals zero after fees. For shor
 
 ### Dependency Order (all complete)
 Feature 6 → {Feature 5, Feature 2} → Feature 4 → Feature 1 → {Feature 7, Feature 8}
+
+## Implemented: WebSocket Integration
+
+**Connection.** Single persistent websocket to `wss://api.elections.kalshi.com/trade-api/ws/v2` with RSA-PSS auth headers (same signing as REST). Auto-reconnect with exponential backoff (1s → 30s max).
+
+**Channels.** Three subscriptions:
+- `orderbook_delta` (private) — snapshot followed by incremental deltas per contract
+- `ticker` (public) — price/volume/OI changes
+- `fill` (private) — our trade fills for position tracking
+
+**BookState.** Central in-memory state object. Orderbooks stored as `{side: {price_cents: qty}}` dicts for O(1) delta application. Converted to sorted API-compatible format on read. Position mids recomputed automatically on every orderbook update.
+
+**Startup flow.** Positions and orderbooks fetched via REST once at startup (reliable, complete). Websocket connects after, subscribing to all held tickers. Future updates arrive via WS, keeping state fresh without polling.
+
+## Implemented: TUI (Textual)
+
+**Framework.** Textual 8.x — async Python TUI framework. Single event loop manages both websocket and UI rendering.
+
+**Layout.** Header (title + clock + subtitle with position count/PnL/WS status) → main content (70%, tabbed) + risk sidebar (30%) → footer (keybindings).
+
+**Tabs.** 7 views: Positions, Orderbook, VaR/Risk, Kelly, Scenarios, Liquidity, Docs. Switchable via number keys 1-7.
+
+**Risk sidebar.** Always visible. Shows VaR 95/99, CVaR 95, P(ruin), total PnL, and liquidity flags for non-NORMAL contracts.
+
+**Performance.** UI updates debounced at 150ms to prevent rapid WS deltas from flooding the renderer. Risk computations (VaR Monte Carlo, Kelly optimization, liquidity metrics) run in Textual thread workers, not on the UI thread. Recomputed every 10s or on manual refresh (r key).
+
+**Bankroll.** Kelly optimizer uses live account bankroll (cash_balance + portfolio_value) fetched from `GET /portfolio/balance` at startup, instead of a hardcoded value.
+
+**Docs tab.** Built-in documentation accessible via tab 7. Covers all columns, formulas, and flag thresholds.
+
+**Signal handling.** Ctrl+C and q both trigger graceful shutdown (WS disconnect, app exit). Escape deselects. Unknown keys are ignored by Textual's event system.
