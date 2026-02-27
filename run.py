@@ -37,6 +37,14 @@ def fetch_initial_state():
     positions = feed.get_positions()
 
     state = BookState()
+
+    try:
+        cash, portfolio_val = feed.client.get_balance()
+        state.cash_balance = cash
+        state.portfolio_value = portfolio_val
+    except Exception:
+        pass
+
     state.set_positions(positions)
 
     # Populate initial orderbooks from REST

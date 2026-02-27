@@ -29,9 +29,15 @@ class BookState:
         self.orderbooks: dict[str, dict] = {}
         self.ticker_data: dict[str, TickerData] = {}
         self.market_meta: dict[str, dict] = {}
+        self.cash_balance: float = 0.0
+        self.portfolio_value: float = 0.0
         self._ws_connected = False
         self._last_update: datetime | None = None
         self._callbacks: list = []
+
+    @property
+    def bankroll(self) -> float:
+        return self.cash_balance + self.portfolio_value
 
     @property
     def ws_connected(self):
