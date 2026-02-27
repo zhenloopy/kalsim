@@ -180,3 +180,7 @@ TabbedContent {
     height: 10;
     max-height: 10;
 }
+
+#docs-panel {
+    padding: 1 2;
+}
