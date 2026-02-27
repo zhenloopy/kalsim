@@ -231,15 +231,20 @@ class RiskDeskApp(PageNavMixin, App):
         from rich.text import Text
         t = Text()
         t.append("KELLY OPTIMAL SIZING\n\n", style="bold cyan")
-        t.append(f"  {'Contract':<20} {'Raw':>8} {'Target':>8} {'Trade':>8}\n", style="bold dim")
-        t.append(f"  {'─' * 48}\n", style="dim")
+        bankroll = self.book_state.bankroll
+        t.append(f"  Bankroll: ${bankroll:,.2f}", style="bold")
+        t.append(f"  (Cash: ${self.book_state.cash_balance:,.2f} + Portfolio: ${self.book_state.portfolio_value:,.2f})\n\n", style="dim")
+        t.append(f"  {'Contract':<20} {'Raw':>8} {'Target$':>9} {'Current$':>10} {'Trade':>8}\n", style="bold dim")
+        t.append(f"  {'─' * 59}\n", style="dim")
         for i, cid in enumerate(kr.contract_ids):
             raw = kr.raw_kelly[i]
-            tgt = kr.target_fractions[i]
-            trade = kr.recommended_trades[i]
-            trade_style = "green" if trade > 0.001 else "red" if trade < -0.001 else "dim"
-            t.append(f"  {cid:<20} {raw:>+8.4f} {tgt:>+8.4f} ")
-            t.append(f"{trade:>+8.4f}\n", style=trade_style)
+            tgt_dollars = kr.target_fractions[i] * bankroll
+            pos = self.book_state.positions[i] if i < len(self.book_state.positions) else None
+            current_dollars = pos.quantity * pos.entry_price if pos else 0.0
+            trade_dollars = tgt_dollars - current_dollars
+            trade_style = "green" if trade_dollars > 0.01 else "red" if trade_dollars < -0.01 else "dim"
+            t.append(f"  {cid:<20} {raw:>+8.4f} {tgt_dollars:>+8.2f}  {current_dollars:>+8.2f}  ")
+            t.append(f"{trade_dollars:>+8.2f}\n", style=trade_style)
         content.update(t)
 
     def _refresh_liquidity_table(self):
@@ -319,7 +324,8 @@ class RiskDeskApp(PageNavMixin, App):
             pass
 
         try:
-            kelly_result = kelly_optimize(pos_dicts, bankroll=10_000, kelly_fraction=0.25)
+            bankroll = self.book_state.bankroll or 1.0
+            kelly_result = kelly_optimize(pos_dicts, bankroll=bankroll, kelly_fraction=0.25)
             self._kelly_result = kelly_result
         except Exception:
             pass
