@@ -230,8 +230,8 @@ class TestComputeNav:
         p1 = _make_position("A", quantity=10, mid=0.60)
         p2 = _make_position("B", quantity=-5, mid=0.40)
         state.set_positions([p1, p2])
-        # NAV = 500 + 10*0.60 + (-5)*0.40 = 500 + 6 - 2 = 504
-        assert abs(state.compute_nav() - 504.0) < 1e-10
+        # NAV = 500 + 10*0.60 + 5*(1-0.40) = 500 + 6 + 3 = 509
+        assert abs(state.compute_nav() - 509.0) < 1e-10
 
     def test_nav_with_no_positions(self):
         state = BookState()

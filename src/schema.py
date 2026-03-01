@@ -4,6 +4,7 @@ from datetime import datetime
 
 class Position(BaseModel):
     contract_id: str
+    title: str = ""
     platform: str
     canonical_event_id: str
     quantity: int
@@ -15,6 +16,12 @@ class Position(BaseModel):
     resolves_at: datetime
     tte_days: float
     fee_adjusted_breakeven: float
+
+    @property
+    def market_value(self) -> float:
+        if self.quantity >= 0:
+            return self.quantity * self.current_mid
+        return abs(self.quantity) * (1.0 - self.current_mid)
 
     @model_validator(mode="before")
     @classmethod

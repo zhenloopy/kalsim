@@ -68,7 +68,7 @@ def fetch_initial_state():
     return state, feed.config.kalshi
 
 
-def main():
+def run_tui():
     check_credentials()
 
     print("Fetching positions and orderbooks...")
@@ -97,6 +97,36 @@ def main():
         asyncio.run(run_with_ws())
     except KeyboardInterrupt:
         nav_store.close()
+
+
+def run_desktop():
+    import subprocess
+    import shutil
+
+    npm = shutil.which("npm")
+    if npm is None:
+        print("npm not found. Install Node.js to use desktop mode.")
+        sys.exit(1)
+
+    desktop_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desktop")
+    if not os.path.exists(os.path.join(desktop_dir, "node_modules")):
+        print("Installing desktop dependencies...")
+        subprocess.run([npm, "install"], cwd=desktop_dir, check=True)
+
+    print("Starting desktop app...")
+    subprocess.run([npm, "run", "dev"], cwd=desktop_dir)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="kalsim Risk Desk")
+    parser.add_argument("--mode", choices=["tui", "desktop"], default="desktop")
+    args = parser.parse_args()
+
+    if args.mode == "tui":
+        run_tui()
+    else:
+        run_desktop()
 
 
 if __name__ == "__main__":

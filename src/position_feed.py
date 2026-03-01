@@ -102,6 +102,7 @@ class PositionFeed:
 
         return Position(
             contract_id=ticker,
+            title=market.get("title", ""),
             platform="kalshi",
             canonical_event_id=event_ticker,
             quantity=quantity,

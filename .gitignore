@@ -47,3 +47,8 @@ data/
 build/
 dist/
 *.egg-info/
+
+# desktop app
+desktop/node_modules/
+desktop/dist/
+desktop/dist-electron/

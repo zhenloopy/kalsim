@@ -169,6 +169,7 @@ class BookState:
                     pos.tte_days = max((resolves_at - datetime.now(timezone.utc)).total_seconds() / 86400.0, 0.0)
 
                 pos.canonical_event_id = market.get("event_ticker", market.get("series_ticker", ticker))
+                pos.title = market.get("title", "")
                 self.market_meta[ticker] = market
 
                 yes_levels = orderbook.get("yes", [])
@@ -214,7 +215,7 @@ class BookState:
     def compute_nav(self) -> float:
         nav = self.cash_balance
         for pos in self.positions:
-            nav += pos.quantity * pos.current_mid
+            nav += pos.market_value
         return nav
 
     def get_total_pnl(self) -> float:

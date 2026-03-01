@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 PID_FILE = Path("data/collector.pid")
 LOG_FILE = Path("data/collector.log")
+COLLECTOR_EXE_NAME = "kalsim-collector.exe"
 DEFAULT_INTERVAL = 60
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def _is_pid_alive(pid: int) -> bool:
         kernel32.CloseHandle(handle)
         if ok:
             name = buf.value.lower()
-            return "python" in name
+            return "python" in name or "kalsim-collector" in name
         return False
     else:
         try:
@@ -61,7 +62,15 @@ def start_collector(interval: int = DEFAULT_INTERVAL):
 
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = [sys.executable, "-m", "src.collector", "_run", "--interval", str(interval)]
+    exe = sys.executable
+    if sys.platform == "win32":
+        import shutil
+        collector_exe = Path(exe).parent / COLLECTOR_EXE_NAME
+        if not collector_exe.exists() or collector_exe.stat().st_size != Path(exe).stat().st_size:
+            shutil.copy2(exe, collector_exe)
+        exe = str(collector_exe)
+
+    cmd = [exe, "-m", "src.collector", "_run", "--interval", str(interval)]
     log_fh = open(LOG_FILE, "a")
 
     if sys.platform == "win32":
@@ -128,7 +137,7 @@ def _run_collector(interval: int):
     )
 
     from src.position_feed import PositionFeed
-    from src.nav_store import NavStore, NavSnapshot
+    from src.nav_store import NavStore, NavSnapshot, PositionSnapshot
 
     nav_store = NavStore()
     my_pid = os.getpid()
@@ -160,22 +169,44 @@ def _run_collector(interval: int):
 
             nav = cash
             for pos in positions:
-                nav += pos.quantity * pos.current_mid
+                nav += pos.market_value
 
             pnl = sum(
                 pos.quantity * (pos.current_mid - pos.entry_price)
                 for pos in positions
             )
 
+            ts = time.time()
+
             snap = NavSnapshot(
-                timestamp_utc=time.time(),
+                timestamp_utc=ts,
                 nav=nav,
                 cash=cash,
                 portfolio_value=portfolio_value,
                 unrealized_pnl=pnl,
                 position_count=len(positions),
             )
-            nav_store.record(snap)
+
+            pos_snaps = [
+                PositionSnapshot(
+                    timestamp_utc=ts,
+                    contract_id=pos.contract_id,
+                    platform=pos.platform,
+                    canonical_event_id=pos.canonical_event_id,
+                    quantity=pos.quantity,
+                    entry_price=pos.entry_price,
+                    current_mid=pos.current_mid,
+                    market_prob=pos.market_prob,
+                    model_prob=pos.model_prob,
+                    edge=pos.edge,
+                    resolves_at=pos.resolves_at.timestamp(),
+                    tte_days=pos.tte_days,
+                    fee_adjusted_breakeven=pos.fee_adjusted_breakeven,
+                )
+                for pos in positions
+            ]
+
+            nav_store.record(snap, pos_snaps)
             logger.info(
                 f"NAV=${nav:,.2f} cash=${cash:,.2f} "
                 f"positions={len(positions)} pnl=${pnl:+,.2f}"

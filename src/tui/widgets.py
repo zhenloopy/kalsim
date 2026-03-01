@@ -199,8 +199,9 @@ class NavChart(Vertical):
                 labels.append(dt.strftime("%m/%d"))
 
         nav_min, nav_max = min(navs), max(navs)
-        span_val = nav_max - nav_min if nav_max != nav_min else abs(nav_max) * 0.1 or 1.0
-        plt.ylim(nav_min - span_val * 0.1, nav_max + span_val * 0.1)
+        pad_lo = abs(nav_min) * 0.1 if nav_min != 0 else 1.0
+        pad_hi = abs(nav_max) * 0.1 if nav_max != 0 else 1.0
+        plt.ylim(nav_min - pad_lo, nav_max + pad_hi)
 
         plt.plot(navs, marker="braille")
         plt.title(f"NAV — {self.active_range}")

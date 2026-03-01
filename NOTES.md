@@ -16,21 +16,37 @@ src/
   var_engine.py      - Monte Carlo VaR/CVaR with correlated binary resolution
   kelly.py           - Kelly criterion optimizer with constraints
   scenario.py        - Scenario stress testing with deterministic P&L
+  nav_store.py       - SQLite persistence layer for NAV snapshots
+  api/
+    server.py        - FastAPI app with lifespan (startup: fetch_initial_state, WS, risk/NAV loops)
+    routes_portfolio.py - REST: /api/positions, /api/nav/history, /api/status, /api/positions/{id}/orderbook
+    routes_risk.py   - REST: /api/risk/var, kelly, liquidity, scenarios; POST scenarios, refresh
+    routes_settings.py - REST: /api/collector/status, start, stop
+    ws_bridge.py     - WebSocket /api/ws — debounced broadcast of BookState changes + risk updates
+    deps.py          - Shared singleton state (BookState, NavStore, RiskCache)
+    schemas.py       - Pydantic response models
   tui/
-    app.py           - Main Textual TUI application
-    widgets.py       - Custom widgets (OrderbookDisplay, CachedDataTable, ScenarioInput, SettingsPanel)
+    app.py           - Textual TUI application (legacy, use --mode tui)
+    widgets.py       - Custom TUI widgets
     styles.tcss      - Textual CSS styling
+desktop/
+  electron/
+    main.ts          - Electron main process: spawn Python, create BrowserWindow, lifecycle
+    preload.ts       - Expose API base URL to renderer
+    python.ts        - Python process manager (spawn venv/Scripts/python.exe, health check, kill)
+  src/
+    App.tsx          - Root: Header + TabBar + active tab + Footer
+    api/client.ts    - REST fetch wrapper
+    api/ws.ts        - WebSocket client with auto-reconnect
+    api/types.ts     - TypeScript types mirroring Python schemas
+    hooks/           - useBookState (WS-driven live state), useKeyboard, useNavHistory, useCollector
+    components/
+      layout/        - Header, TabBar, Footer
+      tabs/          - PositionsTab, OrderbookTab, VarTab, KellyTab, ScenariosTab, LiquidityTab, DocsTab, SettingsTab
+      charts/        - NavChart (TradingView Lightweight Charts), PnlDistribution (SVG histogram)
+      shared/        - DataGrid (sortable table), StatusBadge, RangeSelector
 tests/
-  test_position_feed.py - Fee math, schema validation, mid computation
-  test_liquidity.py     - Slippage hand calculations, flag thresholds
-  test_factor_model.py  - Covariance reconstruction, stability across windows
-  test_correlation.py   - Regime switching, pre-event vs baseline correlation
-  test_var_engine.py    - Single-contract VaR, CVaR subadditivity, slippage
-  test_kelly.py         - Analytical Kelly recovery, constraints, cluster caps
-  test_scenario.py      - Worst case P&L, no-overlap zero impact, JSON loading
-  test_book_state.py    - Orderbook delta application, PnL, mid price updates
-  test_ws_client.py     - WS message parsing, BookState integration
-  test_collector.py     - PID management, process lifecycle, stale PID detection
+  (12 test files, 186 tests — all core risk/data modules)
 ```
 
 ## Feature Status
@@ -42,8 +58,21 @@ tests/
 - [x] Feature 8 — Kelly Optimizer
 - [x] Feature 7 — Scenario Engine
 - [x] WebSocket Integration
-- [x] TUI (Textual-based terminal UI)
+- [x] TUI (Textual-based terminal UI) — legacy, use `--mode tui`
 - [x] Background NAV Collector
+- [x] Electron + React Desktop App — default mode
+
+## Implemented: Electron + React Desktop App
+
+**Architecture.** Three-layer: Electron (main process) → Python FastAPI (port 8321) → React (renderer). Electron spawns Python as a child process and creates a BrowserWindow. All existing Python backend code is reused unchanged.
+
+**FastAPI server.** `src/api/server.py` — lifespan reuses `run.py:fetch_initial_state()`. REST endpoints for positions, orderbooks, NAV history, VaR, Kelly, liquidity, scenarios. WebSocket endpoint at `/api/ws` broadcasts debounced BookState changes and risk updates.
+
+**Background loops.** Risk computation every 10s in `asyncio.to_thread()` (same pattern as TUI thread workers). NAV snapshots every 60s. Results pushed to React via WebSocket.
+
+**React app.** 8 tabs matching TUI exactly. TradingView Lightweight Charts for NAV time-series (interactive hover/zoom). SVG P&L distribution histogram (new — VaR data existed but wasn't visualized in TUI). Tailwind CSS dark theme.
+
+**Entry point.** `python run.py` defaults to desktop mode. `python run.py --mode tui` for legacy TUI.
 
 ## Implemented: Feature 6 — Unified Position Feed
 
