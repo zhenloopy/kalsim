@@ -106,7 +106,7 @@ export default function PositionsTab() {
   const rows = [{ _cash: true as const, cash }, ...positions];
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4">
       <NavChart />
       <div className="flex-shrink-0">
         <DataGrid

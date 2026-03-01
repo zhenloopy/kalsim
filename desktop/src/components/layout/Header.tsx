@@ -16,8 +16,8 @@ export default function Header({
   const pnlColor = totalPnl >= 0 ? "text-accent-green" : "text-accent-red";
 
   return (
-    <header className="flex items-center justify-between px-4 py-2 bg-surface-1 border-b border-surface-3">
-      <div className="flex items-center gap-6">
+    <header className="flex items-center justify-between px-4 py-2 bg-surface-1 border-b border-surface-3 shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-6 whitespace-nowrap">
         <span className="text-sm font-bold text-accent-cyan tracking-wider">
           kalsim
         </span>
@@ -35,7 +35,7 @@ export default function Header({
           {positionCount} position{positionCount !== 1 ? "s" : ""}
         </span>
       </div>
-      <div className="flex items-center gap-4 text-xs">
+      <div className="flex items-center gap-4 text-xs whitespace-nowrap">
         <span
           className={`flex items-center gap-1 ${
             wsConnected ? "text-accent-green" : "text-accent-red"

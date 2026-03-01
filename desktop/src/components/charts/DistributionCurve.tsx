@@ -117,7 +117,7 @@ export default function DistributionCurve({
   const split = min < 0 && max > 0;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H + AXIS_H}`} className={className}>
+    <svg viewBox={`0 0 ${W} ${H + AXIS_H}`} className={className} style={{ minHeight: 80 }}>
       <defs>
         <clipPath id={`${safeId}-neg`}>
           <rect x={0} y={0} width={split ? zeroX : 0} height={H + AXIS_H} />

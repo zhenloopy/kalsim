@@ -59,7 +59,7 @@ export default function DataGrid<T>({
 
   return (
     <div className="overflow-auto">
-      <table className="w-full text-xs font-mono">
+      <table className="min-w-full w-max text-xs font-mono">
         <thead>
           <tr className="border-b border-surface-3">
             {columns.map((col) => (

@@ -181,7 +181,7 @@ export default function NavChart() {
       <div
         ref={containerRef}
         className="w-full"
-        style={{ height: 300, position: "relative" }}
+        style={{ height: 300, minHeight: 150, position: "relative" }}
       >
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center z-10">

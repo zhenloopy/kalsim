@@ -41,11 +41,11 @@ export default function VarTab() {
         <h2 className="text-xs font-semibold text-accent-cyan mb-3">
           PORTFOLIO VALUE AT RISK
         </h2>
-        <div className="grid grid-cols-5 gap-3">
+        <div className="flex flex-wrap gap-3">
           {metrics.map((m) => (
             <div
               key={m.label}
-              className="bg-surface-2 rounded px-4 py-3 border border-surface-3"
+              className="bg-surface-2 rounded px-4 py-3 border border-surface-3 min-w-[120px] flex-1"
             >
               <div className="text-[10px] text-zinc-500 mb-1">{m.label}</div>
               <div className="text-sm font-mono font-semibold">

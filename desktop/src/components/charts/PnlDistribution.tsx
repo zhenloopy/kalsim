@@ -53,6 +53,7 @@ export default function PnlDistribution({
       <svg
         viewBox={`0 0 ${chartWidth} ${chartHeight + 20}`}
         className="w-full max-w-[600px]"
+        style={{ minHeight: 80 }}
       >
         {histogram.bins.map((bin, i) => {
           const h = (histogram.counts[i] / maxCount) * chartHeight;

@@ -6,12 +6,12 @@ interface TabBarProps {
 
 export default function TabBar({ tabs, active, onSelect }: TabBarProps) {
   return (
-    <nav className="flex bg-surface-1 border-b border-surface-3 px-2">
+    <nav className="flex bg-surface-1 border-b border-surface-3 px-2 shrink-0 overflow-x-auto">
       {tabs.map((tab, i) => (
         <button
           key={tab}
           onClick={() => onSelect(tab)}
-          className={`px-4 py-2 text-xs font-medium transition-colors ${
+          className={`px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
             active === tab
               ? "text-accent-cyan border-b-2 border-accent-cyan"
               : "text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent"

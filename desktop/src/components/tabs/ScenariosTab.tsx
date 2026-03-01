@@ -39,7 +39,7 @@ export default function ScenariosTab() {
   };
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-xs font-semibold text-accent-cyan mb-2">
           ADD SCENARIO
@@ -64,7 +64,7 @@ export default function ScenariosTab() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div>
         <h2 className="text-xs font-semibold text-accent-cyan mb-3">
           SCENARIO STRESS TESTS
         </h2>
